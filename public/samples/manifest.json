@@ -1,0 +1,119 @@
+{
+ "note": "Simulated photos. Demo data, lab validation pending.",
+ "worker": "W-1042",
+ "pod": "DL-000123",
+ "samples": [
+  {
+   "file": "s01_shift1_start.jpg",
+   "title": "Shift 1 start, new pod",
+   "true_dose": 0,
+   "humidity": 0.3,
+   "light": "daylight",
+   "expected": "ok"
+  },
+  {
+   "file": "s02_shift1_end.jpg",
+   "title": "Shift 1 end",
+   "true_dose": 7.5,
+   "humidity": 0.5,
+   "light": "tube light",
+   "expected": "ok"
+  },
+  {
+   "file": "s03_shift2_start.jpg",
+   "title": "Shift 2 start",
+   "true_dose": 7.5,
+   "humidity": 0.8,
+   "light": "warm LED",
+   "expected": "ok"
+  },
+  {
+   "file": "s04_shift2_end.jpg",
+   "title": "Shift 2 end",
+   "true_dose": 18,
+   "humidity": 1.0,
+   "light": "daylight",
+   "expected": "ok"
+  },
+  {
+   "file": "s05_shift3_start.jpg",
+   "title": "Shift 3 start (exposed off-shift)",
+   "true_dose": 26,
+   "humidity": 1.2,
+   "light": "dim room",
+   "expected": "ok"
+  },
+  {
+   "file": "s06_shift3_end.jpg",
+   "title": "Shift 3 end",
+   "true_dose": 41,
+   "humidity": 1.5,
+   "light": "tube light",
+   "expected": "ok"
+  },
+  {
+   "file": "s07_day12.jpg",
+   "title": "Day 12, upside-down photo",
+   "true_dose": 95,
+   "humidity": 2.0,
+   "light": "warm LED",
+   "expected": "ok"
+  },
+  {
+   "file": "s08_day20.jpg",
+   "title": "Day 20",
+   "true_dose": 150,
+   "humidity": 2.5,
+   "light": "daylight",
+   "expected": "ok"
+  },
+  {
+   "file": "s09_day27_retire.jpg",
+   "title": "Day 27, pod near capacity",
+   "true_dose": 210,
+   "humidity": 3.0,
+   "light": "tube light",
+   "expected": "ok"
+  },
+  {
+   "file": "e01_glare.jpg",
+   "title": "Glare on the strip",
+   "true_dose": 41,
+   "humidity": 1.5,
+   "light": "daylight",
+   "expected": "retake"
+  },
+  {
+   "file": "e02_fake_pod.jpg",
+   "title": "Copied pod (bad signature)",
+   "true_dose": 10,
+   "humidity": 0.5,
+   "light": "daylight",
+   "expected": "fake"
+  },
+  {
+   "file": "e03_shutter_closed.jpg",
+   "title": "Shift start with shutter closed",
+   "true_dose": 18,
+   "humidity": 1.0,
+   "light": "tube light",
+   "expected": "shutter"
+  },
+  {
+   "file": "e04_expired.jpg",
+   "title": "Expired pod (wick at line)",
+   "true_dose": 0,
+   "humidity": 0.5,
+   "light": "daylight",
+   "expected": "expired"
+  },
+  {
+   "file": "e05_sodium_lamp.jpg",
+   "title": "Strong orange street lamp",
+   "true_dose": 50,
+   "humidity": 1.0,
+   "light": "harsh sodium lamp",
+   "expected": "ok"
+  }
+ ]
+}
