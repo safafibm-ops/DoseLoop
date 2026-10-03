@@ -100,3 +100,16 @@ export function interp(x, xs, ys) {
   const t = (x - xs[i - 1]) / (xs[i] - xs[i - 1])
   return ys[i - 1] + t * (ys[i] - ys[i - 1])
 }
+
+const M_INV = [
+  [3.2406, -1.5372, -0.4986],
+  [-0.9689, 1.8758, 0.0415],
+  [0.0557, -0.204, 1.057],
+]
+
+export function labToRgb([L, a, b]) {
+  const fy = (L + 16) / 116
+  const f = [fy + a / 500, fy, fy - b / 200]
+  const xyz = f.map((t, i) => (t ** 3 > 216 / 24389 ? t ** 3 : (116 * t - 16) / (24389 / 27)) * WHITE[i])
+  return mulVec(M_INV, xyz).map(toSrgb)
+}

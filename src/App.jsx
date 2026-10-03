@@ -1,51 +1,62 @@
-import { useState } from 'react'
-import Scan from './Scan.jsx'
+import { useEffect } from 'react'
+import { Shell } from './components/ui.jsx'
+import { go, StoreProvider, useRoute, useStore } from './data/store.jsx'
+import { SUPERVISOR } from './data/seed.js'
+import { workerById } from './data/log.js'
+import { Landing, Login } from './screens/Landing.jsx'
+import Scan from './screens/Scan.jsx'
+import { Dashboard, Reports, WorkerDetail } from './screens/Supervisor.jsx'
+import { AlertsPage, History, PodPage, WorkerHome } from './screens/Worker.jsx'
 
-// Placeholder 6-step scale (ppm·hr). Real values come from lab calibration.
-const SCALE = [
-  { dose: 0, color: '#9fd3c7' },
-  { dose: 10, color: '#a7b98a' },
-  { dose: 25, color: '#7a7d3a' },
-  { dose: 50, color: '#6b3f1d' },
-  { dose: 100, color: '#3e2412' },
-  { dose: 200, color: '#1b1b1b' },
-]
-
-function DemoNote() {
-  return <p className="note">Demo data, lab validation pending.</p>
+const WORKER_PAGES = {
+  '/w/home': ['Home', WorkerHome],
+  '/w/scan': ['Scan', Scan],
+  '/w/history': ['History', History],
+  '/w/pod': ['Pod', PodPage],
+  '/w/alerts': ['Alerts', () => <AlertsPage scope="mine" />],
 }
 
-function Landing({ onTryDemo }) {
-  return (
-    <main className="landing">
-      <p className="team">Team LoopHole · SIH26118 · MRPL</p>
-      <h1>DoseLoop</h1>
-      <p className="pitch">
-        A battery-free H₂S wristband that darkens with dose, and a phone scan that turns its colour
-        into a logged ppm·hr reading for every worker, every shift.
-      </p>
-      <button className="cta" onClick={onTryDemo}>
-        Try demo
-      </button>
-      <div className="scale" aria-label="Placeholder dose colour scale">
-        {SCALE.map((s) => (
-          <div key={s.dose} className="step">
-            <span className="swatch" style={{ background: s.color }} />
-            <span>{s.dose}</span>
-          </div>
-        ))}
-      </div>
-      <p className="scale-label">ppm·hr (placeholder scale)</p>
-      <DemoNote />
-    </main>
-  )
+function Routes() {
+  const path = useRoute()
+  const { state, login } = useStore()
+  const session = state.session
+
+  // deep links work without logging in: pick the matching demo role
+  const needed = path.startsWith('/w/') ? 'worker' : path.startsWith('/s/') ? 'supervisor' : null
+  const known = needed || path === '/' || path === '' || path === '/login'
+  useEffect(() => {
+    if (needed && session?.role !== needed) login(needed)
+    if (!known) go('/')
+  }, [needed, known, session?.role, login])
+
+  if (path === '/' || path === '') return <Landing />
+  if (path === '/login') return <Login />
+  if (!needed || session?.role !== needed) return null
+
+  if (path.startsWith('/w/')) {
+    const [, Page] = WORKER_PAGES[path] ?? WORKER_PAGES['/w/home']
+    const w = workerById(state, session.workerId)
+    return (
+      <Shell kind="worker" path={path} title="worker" who={w.name} sub={`${w.id} · ${w.area}`}>
+        <Page />
+      </Shell>
+    )
+  }
+  if (path.startsWith('/s/')) {
+    const page = path.startsWith('/s/worker/') ? <WorkerDetail id={path.split('/')[3]} /> : path === '/s/alerts' ? <AlertsPage scope="all" /> : path === '/s/reports' ? <Reports /> : <Dashboard />
+    return (
+      <Shell kind="supervisor" path={path} title="supervisor" who={SUPERVISOR.name} sub={SUPERVISOR.role}>
+        {page}
+      </Shell>
+    )
+  }
+  return null
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('landing')
-  return screen === 'landing' ? (
-    <Landing onTryDemo={() => setScreen('demo')} />
-  ) : (
-    <Scan onBack={() => setScreen('landing')} />
+  return (
+    <StoreProvider>
+      <Routes />
+    </StoreProvider>
   )
 }
