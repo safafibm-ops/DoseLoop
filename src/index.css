@@ -98,3 +98,249 @@ h1 {
   padding: 8px 12px;
   display: inline-block;
 }
+
+/* ---------- scan screen ---------- */
+.scan {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 16px 64px;
+}
+
+.scan h1 {
+  font-size: 2rem;
+  margin: 8px 0;
+}
+
+.scan h2 {
+  font-size: 1.1rem;
+  margin: 28px 0 10px;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggle {
+  display: inline-flex;
+  border: 2px solid #333;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 16px 0;
+}
+
+.toggle button {
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 10px 22px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.toggle button.on {
+  background: var(--accent);
+  color: #111;
+  font-weight: 700;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.small-cta {
+  padding: 12px 24px;
+  font-size: 1rem;
+}
+
+.samples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.sample {
+  background: #1c1c1c;
+  border: 1px solid #2c2c2c;
+  border-radius: 10px;
+  padding: 6px;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.sample img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.small {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.banner {
+  margin: 20px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #1f1f1f;
+}
+
+.banner.good {
+  background: #12301f;
+  border: 1px solid #1f6b40;
+}
+
+.banner.bad {
+  background: #3a1414;
+  border: 1px solid #8a2b2b;
+}
+
+.banner .big {
+  font-size: 2.2rem;
+  font-weight: 800;
+}
+
+.warn {
+  color: #ffd27a;
+  margin-top: 6px;
+}
+
+.picture {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+  margin: 8px 0;
+}
+
+.step-card {
+  background: #181818;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 14px 0;
+}
+
+.step-card h3 {
+  margin: 4px 0 8px;
+  font-size: 1.05rem;
+}
+
+.step-card p {
+  line-height: 1.5;
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #333;
+  font-size: 0.85rem;
+  margin-right: 6px;
+}
+
+.badge.good,
+.facts .good {
+  background: none;
+  color: #4ade80;
+}
+
+.badge.good {
+  background: #1f6b40;
+  color: #fff;
+}
+
+.badge.bad {
+  background: #8a2b2b;
+  color: #fff;
+}
+
+.facts {
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
+.facts .bad {
+  color: #f87171;
+}
+
+.ctable {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.ctable th,
+.ctable td {
+  padding: 3px 6px;
+  text-align: left;
+  border-bottom: 1px solid #262626;
+}
+
+.sw {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+
+.sw span {
+  display: inline-block;
+  width: 28px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #444;
+}
+
+.duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.duo > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart {
+  width: 100%;
+  max-width: 420px;
+}
+
+.chart .axis {
+  stroke: #555;
+}
+
+.chart .curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.chart .point {
+  fill: #fff;
+  stroke: #111;
+  stroke-width: 2;
+}
+
+.chart text {
+  fill: var(--muted);
+  font-size: 11px;
+}
