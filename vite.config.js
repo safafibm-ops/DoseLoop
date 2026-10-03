@@ -4,12 +4,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  build: { chunkSizeWarningLimit: 16000 }, // OpenCV.js is one big file, loaded only on the scan screen
   plugins: [
     react(),
     // Makes the app installable and work offline (service worker + manifest).
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      workbox: {
+        // OpenCV.js is ~13 MB; cache it and the sample photos so the demo works offline
+        maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,json}'],
+      },
       manifest: {
         name: 'DoseLoop – H₂S Dose Reader',
         short_name: 'DoseLoop',

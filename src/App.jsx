@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Scan from './Scan.jsx'
 
 // Placeholder 6-step scale (ppm·hr). Real values come from lab calibration.
 const SCALE = [
@@ -40,26 +41,11 @@ function Landing({ onTryDemo }) {
   )
 }
 
-function Demo({ onBack }) {
-  return (
-    <main className="landing">
-      <h1>Demo</h1>
-      <p className="pitch">
-        The scan demo (sample pod photos, colour correction and dose log) is being built next.
-      </p>
-      <button className="cta secondary" onClick={onBack}>
-        Back
-      </button>
-      <DemoNote />
-    </main>
-  )
-}
-
 export default function App() {
   const [screen, setScreen] = useState('landing')
   return screen === 'landing' ? (
     <Landing onTryDemo={() => setScreen('demo')} />
   ) : (
-    <Demo onBack={() => setScreen('landing')} />
+    <Scan onBack={() => setScreen('landing')} />
   )
 }
