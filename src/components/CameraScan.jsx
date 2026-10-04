@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { probe } from '../scan/runScan.js'
+import { Icon } from './ui.jsx'
 
 const BACK = { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } }
 const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
@@ -170,18 +171,18 @@ export default function CameraScan({ onCapture, onClose, onFallback }) {
     <div className="cam" role="dialog" aria-modal="true" aria-label="Camera">
       <div className="cam-top">
         <button className="cam-btn" onClick={onClose} aria-label="Close camera">
-          ✕
+          <Icon name="x" size={24} />
         </button>
         <span className="cam-title">Scan the badge</span>
         <span className="cam-tools">
           {torch !== null && (
             <button className={`cam-btn ${torch ? 'on' : ''}`} onClick={flipTorch} aria-label="Torch" aria-pressed={torch}>
-              🔦
+              <Icon name="torch" size={22} />
             </button>
           )}
           {cams > 1 && (
             <button className="cam-btn" onClick={() => setFacing(facing === 'back' ? 'front' : 'back')} aria-label="Switch camera">
-              🔄
+              <Icon name="flip" size={22} />
             </button>
           )}
         </span>
@@ -215,10 +216,10 @@ export default function CameraScan({ onCapture, onClose, onFallback }) {
               the browser’s site settings and allow Camera.
             </p>
             <div className="actions">
-              <button className="cta small-cta" onClick={() => setAttempt(attempt + 1)}>
+              <button className="btn primary" onClick={() => setAttempt(attempt + 1)}>
                 Try again
               </button>
-              <button className="cta secondary small-cta" onClick={onFallback}>
+              <button className="btn secondary on-dark" onClick={onFallback}>
                 Use a photo instead
               </button>
             </div>
@@ -229,7 +230,7 @@ export default function CameraScan({ onCapture, onClose, onFallback }) {
             <b>{status === 'unsupported' ? 'This browser cannot open a live camera here' : error}</b>
             <p>You can still take a photo with the phone’s camera app or upload one.</p>
             <div className="actions">
-              <button className="cta small-cta" onClick={onFallback}>
+              <button className="btn primary" onClick={onFallback}>
                 Take or choose a photo
               </button>
             </div>

@@ -1,5 +1,6 @@
 // The live scan view: shows what the scan engine is doing, stage by stage, on the photo itself.
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from '../components/ui.jsx'
 
 // frame size for a w×h picture: full width, but never taller than 340 px
 const frame = (w, h, extra) => ({ aspectRatio: `${w} / ${h}`, '--ar': w / h, ...extra })
@@ -102,7 +103,13 @@ function SampleMap({ flat, sampling }) {
   )
 }
 
-const Chip = ({ ok, children }) => <span className={`lv-chip ${ok === false ? 'bad' : ok === 'warn' ? 'warn' : 'good'}`}>{children}</span>
+// result chip: icon + text, so pass/warn/fail never depends on colour alone
+const Chip = ({ ok, children }) => (
+  <span className={`lv-chip ${ok === false ? 'bad' : ok === 'warn' ? 'warn' : 'good'}`}>
+    <Icon name={ok === false ? 'x' : ok === 'warn' ? 'alert' : 'check'} size={16} />
+    {children}
+  </span>
+)
 
 /** What the big panel shows for one stage. */
 function Visual({ stage, s, failed }) {
@@ -131,9 +138,9 @@ function Visual({ stage, s, failed }) {
           </div>
           <div className="lv-qr-result">
             {s.qr.text ? (
-              <Chip ok={!!s.qr.valid}>{s.qr.valid ? `✓ Genuine · ${s.qr.serial}` : '✕ Signature does not match'}</Chip>
+              <Chip ok={!!s.qr.valid}>{s.qr.valid ? `Genuine · ${s.qr.serial}` : 'Signature does not match'}</Chip>
             ) : (
-              <Chip ok={false}>✕ QR not readable</Chip>
+              <Chip ok={false}>QR not readable</Chip>
             )}
             <span className="small muted">Ed25519 signature, checked offline</span>
           </div>
@@ -150,13 +157,13 @@ function Visual({ stage, s, failed }) {
           <p className="small muted">Held-out 25 ppm·hr brown (not used for the fit)</p>
           <div className="lv-sw-row">
             <span className="lv-sw" style={{ background: h.measured }}>Photo</span>
-            <span className="lv-arrow">→</span>
+            <span className="lv-arrow" aria-hidden="true">→</span>
             <span className="lv-sw" style={{ background: h.corrected }}>Corrected</span>
             <span className="lv-arrow">≈</span>
             <span className="lv-sw" style={{ background: h.truth }}>Printed</span>
           </div>
           <Chip ok={s.selfTest.good ?? s.selfTest.pass ? true : s.selfTest.pass ? 'warn' : false}>
-            {s.selfTest.pass ? (s.selfTest.good === false ? '!' : '✓') : '✕'} {fmt(s.selfTest.dE)} ΔE off (best under {s.selfTest.limit}, retake over {s.selfTest.retake})
+            {fmt(s.selfTest.dE)} ΔE off (best under {s.selfTest.limit}, retake over {s.selfTest.retake})
           </Chip>
         </div>
       )

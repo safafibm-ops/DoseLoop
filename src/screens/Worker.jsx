@@ -1,6 +1,7 @@
 import { BarChart, CountUp, ReadingLine, Ring } from '../components/Charts.jsx'
 import PodFace from '../components/PodFace.jsx'
-import { DemoNote, fmtDate, fmtTime, fmtWhen, SeverityChip, StatusChip } from '../components/ui.jsx'
+import { DemoNote, fmtDate, fmtTime, fmtWhen, Icon, SeverityChip, StatusChip } from '../components/ui.jsx'
+import { SEVERITY_TONE, STATUS_TONE, TONE } from '../components/tokens.js'
 import { CAPACITY, IN_USE_DAYS, LIMITS, RETIRE_AT, SHELF_DAYS, shiftStatus } from '../data/limits.js'
 import { daysInUse, OFF_SHIFT_TOLERANCE, shiftsOf, workerById, workerSummary } from '../data/log.js'
 import { go, useStore } from '../data/store.jsx'
@@ -8,7 +9,7 @@ import { go, useStore } from '../data/store.jsx'
 const DAY = 86400000
 
 export function capacityColor(f) {
-  return f >= RETIRE_AT ? '#d03b3b' : f >= 0.6 ? '#fab219' : '#0ca30c'
+  return f >= RETIRE_AT ? TONE.over : f >= 0.6 ? TONE.caution : TONE.ok
 }
 
 /** Daily bars for the last `days` days (shift doses summed per day). */
@@ -42,9 +43,9 @@ function PodCard({ pod }) {
   const f = reading / CAPACITY
   const days = daysInUse(pod)
   return (
-    <section className="card pod-card" onClick={() => go('/w/pod')} role="button" tabIndex={0}>
-      <Ring value={reading} max={CAPACITY} marker={CAPACITY * RETIRE_AT} label={`${Math.round(f * 100)}%`} sub="capacity" color={capacityColor(f)} />
-      <div>
+    <button className="card pod-card tappable" onClick={() => go('/w/pod')}>
+      <Ring value={reading} max={CAPACITY} marker={CAPACITY * RETIRE_AT} label={`${Math.round(f * 100)}%`} sub="used" color={capacityColor(f)} size={104} />
+      <div className="grow">
         <h3>Pod {pod.serial}</h3>
         <p className="muted">
           {pod.status === 'assigned'
@@ -54,7 +55,8 @@ function PodCard({ pod }) {
         {pod.status === 'retire_due' && <StatusChip status="over">Replace this pod</StatusChip>}
         {pod.status === 'active' && <StatusChip status="ok">Active</StatusChip>}
       </div>
-    </section>
+      <Icon name="right" size={24} className="go-icon" />
+    </button>
   )
 }
 
@@ -66,25 +68,28 @@ export function WorkerHome() {
   return (
     <>
       <section className={`card shift-card ${open ? 'on' : ''}`}>
-        <div>
-          <span className="eyebrow">{open ? 'On shift' : 'Off shift'}</span>
-          <h2>{open ? `Since ${fmtTime(open.startAt)}` : 'Ready when you are'}</h2>
-          <p className="muted">{open ? `Start reading ${open.startReading} ppm·hr` : 'Open the shutter (green dot), then scan to start.'}</p>
-        </div>
-        <button className="cta" onClick={() => go('/w/scan')}>
+        <span className={`shift-state ${open ? 'on' : ''}`}>
+          <i aria-hidden="true" /> {open ? 'On shift' : 'Off shift'}
+        </span>
+        <h2>{open ? `Since ${fmtTime(open.startAt)}` : 'Ready to start'}</h2>
+        <p className="muted">{open ? `Start reading ${open.startReading} ppm·hr` : 'Open the shutter (green dot), then scan to start.'}</p>
+        <button className="btn primary lg block" onClick={() => go('/w/scan')}>
+          <Icon name="camera" size={24} />
           {open ? 'Scan to end shift' : 'Scan to start shift'}
         </button>
       </section>
 
       {last && (
-        <section className="card last-shift" onClick={() => go('/w/history')} role="button" tabIndex={0}>
-          <span className="eyebrow">Last shift · {fmtWhen(last.startAt)}</span>
-          <div className="big-dose">
-            <CountUp value={last.dose} /> <small>ppm·hr</small>
-          </div>
-          <StatusChip status={shiftStatus(last.dose)} />
+        <button className={`card last-shift tappable edge tone-${STATUS_TONE[shiftStatus(last.dose)]}`} onClick={() => go('/w/history')}>
+          <span className="card-label">Last shift · {fmtWhen(last.startAt)}</span>
+          <span className="dose-line">
+            <span className="big-dose">
+              <CountUp value={last.dose} /> <small>ppm·hr</small>
+            </span>
+            <StatusChip status={shiftStatus(last.dose)} />
+          </span>
           <DoseBullet dose={last.dose} />
-        </section>
+        </button>
       )}
 
       <PodCard pod={pod} />
@@ -92,18 +97,20 @@ export function WorkerHome() {
       <section className="card">
         <div className="card-head">
           <h3>Last 7 days</h3>
-          <button className="link small" onClick={() => go('/w/history')}>
-            All shifts →
+          <button className="btn ghost sm" onClick={() => go('/w/history')}>
+            All shifts <Icon name="right" size={18} />
           </button>
         </div>
         <BarChart bars={bars} refs={LIMIT_REFS} height={160} />
       </section>
 
       {sum.alerts.length > 0 && (
-        <section className="card alert-strip" onClick={() => go('/w/alerts')} role="button" tabIndex={0}>
-          <SeverityChip severity={sum.alerts[0].severity} /> <b>{sum.alerts[0].title}</b>
-          <span className="muted">{sum.alerts.length > 1 ? ` +${sum.alerts.length - 1} more` : ''}</span>
-        </section>
+        <button className="card alert-strip tappable" onClick={() => go('/w/alerts')}>
+          <SeverityChip severity={sum.alerts[0].severity} />
+          <b className="grow">{sum.alerts[0].title}</b>
+          <span className="muted">{sum.alerts.length > 1 ? `+${sum.alerts.length - 1} more` : ''}</span>
+          <Icon name="right" size={24} className="go-icon" />
+        </button>
       )}
       <DemoNote />
     </>
@@ -115,9 +122,9 @@ export function DoseBullet({ dose }) {
   const max = 100
   const pct = (v) => `${Math.min(100, (v / max) * 100)}%`
   return (
-    <div className="bullet" aria-label={`${dose} ppm·hr against limits`}>
+    <div className="bullet" role="img" aria-label={`${dose} ppm·hr. India shift limit ${LIMITS.shiftIndia}, ACGIH ${LIMITS.shiftAcgih}.`}>
       <div className="bullet-track">
-        <i className="bullet-fill" style={{ width: pct(dose) }} />
+        <i className={`bullet-fill tone-${STATUS_TONE[shiftStatus(dose)]}`} style={{ width: pct(dose) }} />
         <span className="bullet-mark dashed" style={{ left: pct(LIMITS.shiftAcgih) }} title="ACGIH" />
         <span className="bullet-mark" style={{ left: pct(LIMITS.shiftIndia) }} title="India" />
       </div>
@@ -172,7 +179,9 @@ export function History({ workerId: wid }) {
                     Shift {s.shift} · {s.podSerial} · started at {s.startReading}
                   </span>
                 </div>
-                <span className="chip live">● On shift</span>
+                <span className="chip live">
+                  <i aria-hidden="true" /> On shift
+                </span>
               </li>
             ))}
           {done.slice(0, 40).map((s) => (
@@ -184,15 +193,21 @@ export function History({ workerId: wid }) {
                 <span className="muted">
                   {fmtTime(s.startAt)}–{fmtTime(s.endAt)} · {s.podSerial} · {s.startReading} → {s.endReading}
                 </span>
-                {s.offShift > OFF_SHIFT_TOLERANCE && <span className="flag">▲ +{s.offShift} ppm·hr while off shift</span>}
+                {s.offShift > OFF_SHIFT_TOLERANCE && (
+                  <span className="flag">
+                    <Icon name="alert" size={16} /> +{s.offShift} ppm·hr while off shift
+                  </span>
+                )}
               </div>
               <div className="right">
-                <b>{s.dose}</b>
+                <b className="num">
+                  {s.dose} <small>ppm·hr</small>
+                </b>
                 <StatusChip status={shiftStatus(s.dose)} />
               </div>
             </li>
           ))}
-          {!shifts.length && <li className="muted">No shifts yet. Scan your pod to start one.</li>}
+          {!shifts.length && <li className="empty">No shifts yet. Scan your pod to start one.</li>}
         </ul>
       </section>
       <DemoNote />
@@ -243,14 +258,21 @@ export function PodPage({ workerId: wid }) {
               <b>{c.text}</b>
             </div>
             <div className="meter-track">
-              <i style={{ width: `${Math.min(100, (c.value / c.limit) * 100)}%`, background: capacityColor(c.value / c.limit * RETIRE_AT) }} />
+              <i style={{ width: `${Math.min(100, (c.value / c.limit) * 100)}%`, background: capacityColor((c.value / c.limit) * RETIRE_AT) }} />
             </div>
           </div>
         ))}
         <ul className="facts">
-          <li>✓ Tamper tab: intact (checked on the photo)</li>
-          <li>✓ Leak events: none</li>
-          <li>{pod.shutter === 'closed' ? '● Shutter closed (red dot)' : '● Shutter open (green dot) at last scan'}</li>
+          <li>
+            <Icon name="check" size={18} className="ok-ic" /> Tamper tab intact (checked on the photo)
+          </li>
+          <li>
+            <Icon name="check" size={18} className="ok-ic" /> No leak events
+          </li>
+          <li>
+            <span className={`shutter-dot ${pod.shutter === 'closed' ? 'closed' : ''}`} aria-hidden="true" />
+            {pod.shutter === 'closed' ? 'Shutter closed (red dot)' : 'Shutter open (green dot) at last scan'}
+          </li>
         </ul>
       </section>
       <section className="card">
@@ -270,7 +292,7 @@ export function AlertsPage({ scope }) {
   const Item = ({ a }) => {
     const w = workerById(state, a.workerId)
     return (
-      <li className={`alert-item ${a.ack ? 'acked' : ''}`}>
+      <li className={`alert-item tone-${SEVERITY_TONE[a.severity]} ${a.ack ? 'acked' : ''}`}>
         <div className="alert-top">
           <SeverityChip severity={a.severity} />
           <span className="muted small">{fmtWhen(a.at)}</span>
@@ -282,8 +304,8 @@ export function AlertsPage({ scope }) {
           {a.podSerial ?? ''}
         </span>
         {!a.ack && (
-          <button className="link small ack" onClick={() => ack(a.id)}>
-            {scope === 'all' ? 'Acknowledge' : 'Mark as seen'}
+          <button className="btn secondary sm ack" onClick={() => ack(a.id)}>
+            <Icon name="check" size={18} /> {scope === 'all' ? 'Acknowledge' : 'Mark as seen'}
           </button>
         )}
       </li>
@@ -292,12 +314,16 @@ export function AlertsPage({ scope }) {
   return (
     <>
       <section className="card">
-        <h3>Open ({open.length})</h3>
+        <h3>Open alerts ({open.length})</h3>
         <ul className="alert-list">
           {open.map((a) => (
             <Item key={a.id} a={a} />
           ))}
-          {!open.length && <li className="muted">No open alerts. 👍</li>}
+          {!open.length && (
+            <li className="empty">
+              <Icon name="shield" size={28} /> No open alerts.
+            </li>
+          )}
         </ul>
       </section>
       {seen.length > 0 && (

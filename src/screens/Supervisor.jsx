@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Heatmap } from '../components/Charts.jsx'
-import { DemoNote, fmtWhen, SeverityChip, StatusChip } from '../components/ui.jsx'
+import { DemoNote, fmtWhen, Icon, SeverityChip, StatusChip } from '../components/ui.jsx'
+import { SEVERITY_TONE } from '../components/tokens.js'
 import { CAPACITY, LIMITS, shiftStatus } from '../data/limits.js'
 import { closedShifts, REPORT_COLUMNS, reportRows, round1, toCsv, workerById, workerSummary } from '../data/log.js'
 import { go, useStore } from '../data/store.jsx'
@@ -11,9 +12,9 @@ const RANGES = [7, 14, 30]
 
 function RangePicker({ days, setDays, options = RANGES }) {
   return (
-    <div className="toggle small-toggle" role="group" aria-label="Date range">
+    <div className="segmented" role="group" aria-label="Date range">
       {options.map((d) => (
-        <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>
+        <button key={d} className={days === d ? 'on' : ''} aria-pressed={days === d} onClick={() => setDays(d)}>
           Last {d} days
         </button>
       ))}
@@ -76,11 +77,11 @@ export function Dashboard() {
           <b>{shifts.length}</b>
           <em>last {days} days</em>
         </div>
-        <div className={`kpi ${openAlerts.length ? 'hot' : ''}`} onClick={() => go('/s/alerts')} role="button" tabIndex={0}>
-          <span>Open alerts</span>
+        <button className={`kpi tappable ${openAlerts.length ? 'hot' : ''}`} onClick={() => go('/s/alerts')}>
+          <span>{openAlerts.length > 0 && <Icon name="alert" size={16} />} Open alerts</span>
           <b>{openAlerts.length}</b>
           <em>{openAlerts.filter((a) => a.severity === 'critical').length} critical</em>
-        </div>
+        </button>
         <div className="kpi">
           <span>Highest shift dose</span>
           <b>{top ? top.dose : '–'}</b>
@@ -91,7 +92,7 @@ export function Dashboard() {
       <section className="card">
         <div className="card-head">
           <h3>Team exposure by day</h3>
-          <span className="muted small">Tap a worker for details</span>
+          <span className="muted small">Select a worker for details</span>
         </div>
         <Heatmap rows={rows} cols={cols} cell={cell} max={30} onRowClick={(r) => go(`/s/worker/${r.id}`)} />
       </section>
@@ -104,12 +105,12 @@ export function Dashboard() {
               const sum = workerSummary(state, w.id, now)
               const f = (sum.pod?.lastReading ?? 0) / CAPACITY
               return (
-                <li key={w.id} onClick={() => go(`/s/worker/${w.id}`)} role="button" tabIndex={0}>
+                <li key={w.id} onClick={() => go(`/s/worker/${w.id}`)} onKeyDown={(e) => e.key === 'Enter' && go(`/s/worker/${w.id}`)} role="button" tabIndex={0}>
                   <span className={`dot ${sum.open ? 'live' : ''}`} title={sum.open ? 'On shift' : 'Off shift'} />
                   <div className="grow">
                     <b>{w.name}</b>
                     <span className="muted small">
-                      {w.area} · {sum.pod?.serial}
+                      {sum.open ? 'On shift' : 'Off shift'} · {w.area} · {sum.pod?.serial}
                     </span>
                     <div className="mini-track" title={`Pod ${Math.round(f * 100)}% used`}>
                       <i style={{ width: `${Math.min(100, f * 100)}%`, background: capacityColor(f) }} />
@@ -117,7 +118,11 @@ export function Dashboard() {
                   </div>
                   <div className="right">
                     {sum.last ? <StatusChip status={shiftStatus(sum.last.dose)}>{sum.last.dose}</StatusChip> : <span className="muted small">no shifts</span>}
-                    {sum.alerts.length > 0 && <span className="badge-count">{sum.alerts.length}</span>}
+                    {sum.alerts.length > 0 && (
+                      <span className="badge-count" title="Open alerts">
+                        <Icon name="bell" size={14} /> {sum.alerts.length}
+                      </span>
+                    )}
                   </div>
                 </li>
               )
@@ -127,13 +132,13 @@ export function Dashboard() {
         <section className="card">
           <div className="card-head">
             <h3>Needs attention</h3>
-            <button className="link small" onClick={() => go('/s/alerts')}>
-              All alerts →
+            <button className="btn ghost sm" onClick={() => go('/s/alerts')}>
+              All alerts <Icon name="right" size={18} />
             </button>
           </div>
           <ul className="alert-list">
             {openAlerts.slice(0, 4).map((a) => (
-              <li key={a.id} className="alert-item">
+              <li key={a.id} className={`alert-item tone-${SEVERITY_TONE[a.severity]}`}>
                 <div className="alert-top">
                   <SeverityChip severity={a.severity} />
                   <span className="muted small">{fmtWhen(a.at)}</span>
@@ -142,12 +147,16 @@ export function Dashboard() {
                 <span>
                   {workerById(state, a.workerId)?.name}: {a.detail}
                 </span>
-                <button className="link small ack" onClick={() => ack(a.id)}>
-                  Acknowledge
+                <button className="btn secondary sm ack" onClick={() => ack(a.id)}>
+                  <Icon name="check" size={18} /> Acknowledge
                 </button>
               </li>
             ))}
-            {!openAlerts.length && <li className="muted">All clear. 👍</li>}
+            {!openAlerts.length && (
+              <li className="empty">
+                <Icon name="shield" size={28} /> All clear. No open alerts.
+              </li>
+            )}
           </ul>
         </section>
       </div>
@@ -159,13 +168,13 @@ export function Dashboard() {
 export function WorkerDetail({ id }) {
   const { state } = useStore()
   const w = workerById(state, id)
-  if (!w) return <p>Worker not found.</p>
+  if (!w) return <p className="empty">Worker not found.</p>
   const sum = workerSummary(state, id)
   const f = (sum.pod?.lastReading ?? 0) / CAPACITY
   return (
     <>
-      <button className="link" onClick={() => go('/s/dashboard')}>
-        ← Team
+      <button className="btn ghost back" onClick={() => go('/s/dashboard')}>
+        <Icon name="back" size={20} /> Team
       </button>
       <section className="card worker-head">
         <span className="avatar">{w.name.split(' ').map((p) => p[0]).join('')}</span>
@@ -176,7 +185,13 @@ export function WorkerDetail({ id }) {
           </p>
         </div>
         <div className="right">
-          {sum.open ? <span className="chip live">● On shift</span> : <span className="muted small">Off shift</span>}
+          {sum.open ? (
+            <span className="chip live">
+              <i aria-hidden="true" /> On shift
+            </span>
+          ) : (
+            <span className="chip off">Off shift</span>
+          )}
         </div>
       </section>
       <section className="kpis">
@@ -192,8 +207,11 @@ export function WorkerDetail({ id }) {
         </div>
         <div className="kpi">
           <span>Pod {sum.pod?.serial}</span>
-          <b style={{ color: capacityColor(f) }}>{Math.round(f * 100)}%</b>
+          <b>{Math.round(f * 100)}%</b>
           <em>capacity used</em>
+          <span className="mini-track" aria-hidden="true">
+            <i style={{ width: `${Math.min(100, f * 100)}%`, background: capacityColor(f) }} />
+          </span>
         </div>
       </section>
       <History workerId={id} />
@@ -279,7 +297,7 @@ export function Reports() {
     <>
       <div className="filters">
         <RangePicker days={days} setDays={setDays} />
-        <select value={workerId} onChange={(e) => setWorkerId(e.target.value)} aria-label="Worker">
+        <select className="select" value={workerId} onChange={(e) => setWorkerId(e.target.value)} aria-label="Worker">
           <option value="all">All workers</option>
           {state.workers.map((w) => (
             <option key={w.id} value={w.id}>
@@ -300,7 +318,7 @@ export function Reports() {
           <em>ppm·hr</em>
         </div>
         <div className={`kpi ${over ? 'hot' : ''}`}>
-          <span>Over limit</span>
+          <span>{over > 0 && <Icon name="stop" size={16} />} Over limit</span>
           <b>{over}</b>
           <em>shifts &gt; {LIMITS.shiftIndia} ppm·hr</em>
         </div>
@@ -314,15 +332,17 @@ export function Reports() {
         <div className="card-head">
           <h3>Exposure register</h3>
           <div className="actions">
-            <button className="cta small-cta" data-coach="export:pdf" onClick={pdf} disabled={busy || !rows.length}>
-              {busy ? 'Making PDF…' : '⬇ Download PDF'}
+            <button className="btn primary" data-coach="export:pdf" onClick={pdf} disabled={busy || !rows.length}>
+              {busy ? <span className="spinner small" /> : <Icon name="download" size={20} />}
+              {busy ? 'Making PDF…' : 'Download PDF'}
             </button>
-            <button className="cta secondary small-cta" onClick={csv} disabled={!rows.length}>
-              ⬇ Download CSV
+            <button className="btn secondary" onClick={csv} disabled={!rows.length}>
+              <Icon name="download" size={20} /> Download CSV
             </button>
           </div>
         </div>
         <p className="muted small">Columns are a draft of the DGMS/OISD register; align with the official template once received.</p>
+        {!rows.length && <p className="empty">No shifts in this range. Pick a longer range or another worker.</p>}
         <div className="table-scroll">
           <table className="rtable">
             <thead>
