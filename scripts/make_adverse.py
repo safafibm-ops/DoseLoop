@@ -10,7 +10,8 @@ Outputs <out>/<name>.jpg and <out>/manifest.json (true printed dose, what should
 Uses the committed print/pod_face_*.png faces, so no signing key is needed.
 
 Run:  python3 scripts/make_adverse.py                  -> test/adverse/  (small set used by `npm test`)
-      python3 scripts/make_adverse.py --stress 200 DIR  -> a big random set for scripts/stress.mjs
+      python3 scripts/make_adverse.py --stress 200 DIR  -> a big random set (test/adverse.test.js with STRESS_DIR)
+      python3 scripts/make_adverse.py --gap DIR 12      -> phone vs laptop pairs (test/adverse.test.js with GAP_DIR)
 """
 import json
 import sys
@@ -154,7 +155,11 @@ def shoot(layout, target, cam, rng, opts):
         cx, cy = rng.uniform(0.35, 0.65, 2)
         lin += 1.5 * np.exp(-(((gx - cx) / 0.05) ** 2 + ((gy - cy) / 0.035) ** 2))[..., None]
     del gx, gy, field
+    return develop(lin, cam, rng, opts)
 
+
+def develop(lin, cam, rng, opts):
+    """What the camera does to the light (linear RGB, H x W x 3) that reaches its sensor."""
     # camera: exposure, white balance, tone curve, saturation, blur, sharpening, noise, JPEG
     expo = opts.get("exposure", rng.uniform(0.6, 1.15))
     p99 = np.percentile(lin.reshape(-1, 3).max(1), 99)
@@ -188,6 +193,70 @@ def shoot(layout, target, cam, rng, opts):
     out = np.clip(out, 0, 255).astype(np.uint8)
     q = opts.get("jpeg", cam["jpeg"])
     return Image.fromarray(out), q
+
+
+# ---------- a phone photographing a laptop screen ----------
+
+def screen_shot(path, cam, rng, opts):
+    """Phone photo of a laptop screen that shows the photo at `path` (what a judge does when the
+    sample photo is open on a laptop). Adds the panel's own colours, its RGB sub-pixels and dark row
+    gaps (these make moiré stripes when the phone's pixels don't line up), screen tilt and room
+    reflections on the glass, then the phone camera."""
+    src = np.asarray(Image.open(path).convert("RGB"))
+    sw = int(opts.get("shown", rng.uniform(900, 1400)))  # screen pixels the photo is shown across
+    sh = int(round(src.shape[0] * sw / src.shape[1]))
+    disp = cv2.resize(src, (sw, sh), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
+    # the panel: its own gamma, white point and (smaller) colour range
+    lin = disp ** opts.get("gamma", rng.uniform(2.0, 2.5))
+    lin *= np.array(opts.get("white", [rng.uniform(0.88, 1.0), 1, rng.uniform(1.0, 1.15)]), np.float32)
+    lum = lin @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+    lin = lum[..., None] + (lin - lum[..., None]) * opts.get("gamut", rng.uniform(0.65, 1.0))
+    del lum
+    # sub-pixels: each screen pixel is 3 vertical stripes (R, G, B) with a dark gap under it
+    F = 3
+    big = np.repeat(np.repeat(lin, F, 0), F, 1)
+    mask = np.zeros((F, F, 3), np.float32)
+    for c in range(3):
+        mask[:, c, c] = 1
+    mask[F - 1] *= 0.35
+    mask /= mask.mean((0, 1))
+    big *= np.tile(mask, (sh, sw, 1))
+    del lin
+    # where the screen is in the phone photo
+    W, H = cam["size"]
+    fill = opts.get("fill", rng.uniform(0.6, 0.95))  # shown photo width / phone photo width
+    k = fill * W / big.shape[1]                       # phone px per sub-pixel column
+    ang = np.deg2rad(opts.get("angle", rng.uniform(-8, 8)))
+    tilt = opts.get("tilt", rng.uniform(0, 0.15))
+    centre = np.array([W / 2, H / 2]) + rng.uniform(-0.05, 0.05, 2) * [W, H]
+    hw, hh = big.shape[1] / 2, big.shape[0] / 2
+    box = np.array([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]])
+    R = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
+    tdir = rng.uniform(0, 2 * np.pi)
+    d = []
+    for p in box:
+        q = centre + R @ (p * k)
+        sc = 1 - tilt * (np.cos(tdir) * p[0] / hw + np.sin(tdir) * p[1] / hh) / 2
+        d.append(centre + (q - centre) * sc)
+    Hm = cv2.getPerspectiveTransform(np.float32(box + [hw, hh]), np.float32(d))
+    # lens blur happens before the sensor samples the screen (too little of it -> moiré)
+    optics = opts.get("optics", rng.uniform(0.5, 1.4))  # phone px
+    big = cv2.GaussianBlur(big, (0, 0), max(0.3, optics / k))
+    bezel = np.float32(opts.get("bezel", rng.uniform(0.02, 0.3)))  # browser page around the photo
+    img = cv2.warpPerspective(big, Hm, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(float(bezel),) * 3)
+    del big
+    # the glass reflects the room: an even veil plus a soft bright patch (window, lamp)
+    gy, gx = np.mgrid[0:H, 0:W].astype(np.float32)
+    gx /= W
+    gy /= H
+    img += np.float32(opts.get("veil", rng.uniform(0, 0.04)))
+    refl = opts.get("reflection", rng.uniform(0, 0.25) if rng.random() < 0.5 else 0)
+    if refl:
+        cx, cy, r = rng.uniform(0.2, 0.8), rng.uniform(0.2, 0.8), rng.uniform(0.15, 0.4)
+        tint = np.array([1, 0.97, 0.9], np.float32)
+        img += refl * np.exp(-((gx - cx) ** 2 + (gy - cy) ** 2) / (2 * r * r))[..., None] * tint
+    del gx, gy
+    return develop(img, cam, rng, {"blur": 0, "awb": opts.get("awb", rng.uniform(0.3, 1.0)), **opts})
 
 
 CAMS = {
@@ -231,6 +300,50 @@ def make(name, cam, sheet, dose, opts, rng):
     return img, q
 
 
+GAP_PRINT_CAMS = ["webcam-1080p", "phone-12MP", "phone-budget", "phone-small"]  # first one = the laptop
+GAP_SCREEN_CAMS = ["phone-12MP", "phone-budget", "phone-small"]
+GAP_SHIFTS = [("s01_shift1_start", "s02_shift1_end"), ("s03_shift2_start", "s04_shift2_end"), ("s05_shift3_start", "s06_shift3_end")]
+
+
+def gap(out, n, seed):
+    """Phone vs laptop: the same start + end badges scanned by different cameras.
+    print:  printed big badges (0 ppm·hr and the end dose), same scene, laptop webcam vs phones.
+    screen: the demo sample photos open on a laptop, photographed off the screen by phones."""
+    out.mkdir(parents=True, exist_ok=True)
+    pairs = []
+    for i in range(n):
+        base = np.random.default_rng([seed, i])
+        end = int(base.choice([10, 25, 50]))
+        opts = {"light": str(base.choice(list(LIGHTS))), "fill": float(base.uniform(0.45, 0.6)), "angle": float(base.uniform(-20, 20)),
+                "tilt": float(base.uniform(0, 0.2)), "exposure": float(base.uniform(0.7, 1.1)), "awb": float(base.uniform(0.4, 1.0))}
+        for cam in GAP_PRINT_CAMS:
+            files = []
+            for which, dose in (("start", 0), ("end", end)):
+                rng = np.random.default_rng([seed, i, 1 if which == "start" else 2])  # same scene for every camera
+                layout = sheet_big(end)
+                img, q = shoot(layout, target_of(layout, dose), CAMS[cam], rng, opts)
+                name = f"p{i:02d}_{cam}_{which}.jpg"
+                img.save(out / name, quality=q)
+                files.append(name)
+            pairs.append({"kind": "print", "scene": i, "camera": cam, "start": files[0], "end": files[1], "true": end})
+            print(pairs[-1], flush=True)
+        s0, s1 = GAP_SHIFTS[i % len(GAP_SHIFTS)]
+        sopts = {"shown": float(base.uniform(900, 1400)), "gamma": float(base.uniform(2.0, 2.5)), "gamut": float(base.uniform(0.65, 1.0)),
+                 "white": [float(base.uniform(0.88, 1.0)), 1.0, float(base.uniform(1.0, 1.15))]}
+        for cam in GAP_SCREEN_CAMS:
+            files = []
+            for which, sample in (("start", s0), ("end", s1)):
+                rng = np.random.default_rng([seed, i, 3, len(files)])
+                img, q = screen_shot(ROOT / f"public/samples/{sample}.jpg", CAMS[cam], rng, sopts)
+                name = f"s{i:02d}_{cam}_{which}.jpg"
+                img.save(out / name, quality=q)
+                files.append(name)
+            pairs.append({"kind": "screen", "scene": i, "camera": cam, "start": files[0], "end": files[1],
+                          "laptop_start": f"public/samples/{s0}.jpg", "laptop_end": f"public/samples/{s1}.jpg"})
+            print(pairs[-1], flush=True)
+    (out / "manifest.json").write_text(json.dumps({"pairs": pairs}, indent=1))
+
+
 def main():
     args = sys.argv[1:]
     if args[:1] == ["--stress"]:
@@ -251,6 +364,9 @@ def main():
             man.append({"file": f"{name}.jpg", "camera": cam, "sheet": sheet, "true_dose": dose, "glare": bool(opts["glare"])})
             print(name, flush=True)
         (out / "manifest.json").write_text(json.dumps({"photos": man}, indent=1))
+        return
+    if args[:1] == ["--gap"]:
+        gap(ROOT / args[1], int(args[2]) if len(args) > 2 else 5, int(args[3]) if len(args) > 3 else 1)
         return
     out = ROOT / (args[0] if args else "test/adverse")
     out.mkdir(parents=True, exist_ok=True)

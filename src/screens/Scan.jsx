@@ -91,11 +91,11 @@ function pipelineSteps(s, error, logged) {
     )
   if (s.sampling)
     steps.push(
-      <Step key="3" n="3" title="Read the colours" ok={!s.sampling.glare} summary={s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : `${s.sampling.patches.length + s.sampling.scale.length + 2 - (s.sampling.skipped?.length ?? 0)} areas sampled, light evened out${s.sampling.skipped?.length ? `, ${s.sampling.skipped.join(' & ')} over-exposed (left out)` : ''}`} />,
+      <Step key="3" n="3" title="Read the colours" ok={!s.sampling.glare && !(s.sampling.uneven > s.sampling.unevenLimit) && !(s.sampling.blackSpread > s.sampling.blackLimit)} summary={s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : s.sampling.blackSpread > s.sampling.blackLimit ? `Reflection over the pod: corners differ by ${fmt(s.sampling.blackSpread)} L*` : s.sampling.uneven > s.sampling.unevenLimit ? `Colour areas are streaky (${fmt(s.sampling.uneven)} ΔE): screen stripes or a reflection` : `${s.sampling.patches.length + s.sampling.scale.length + 2 - (s.sampling.skipped?.length ?? 0)} areas sampled, light evened out${s.sampling.skipped?.length ? `, ${s.sampling.skipped.join(' & ')} over-exposed (left out)` : ''}`} />,
     )
   if (s.correction)
     steps.push(
-      <Step key="4" n="4" title="Correct for light and camera" ok summary={`Tone curve + 3×3 matrix (average error ${fmt(s.correction.meanGlobalDE)} ΔE), then a local fix from the printed browns (${fmt(s.correction.meanFitDE)} ΔE)`}>
+      <Step key="4" n="4" title="Correct for light and camera" ok summary={`Tone curve + 3×3 matrix (average error ${fmt(s.correction.meanGlobalDE)} ΔE), then a curve through all 6 printed brown steps (${fmt(s.correction.meanFitDE)} ΔE; the 25 ppm·hr row is left out for the self-test)`}>
         <table className="ctable">
           <thead>
             <tr>
@@ -132,7 +132,7 @@ function pipelineSteps(s, error, logged) {
     )
   if (s.dose)
     steps.push(
-      <Step key="6" n="6" title="Strip minus reference → dose" ok summary={`${fmt(s.dose.strip.dE)} − ${fmt(s.dose.reference.dE)} = ${fmt(s.dose.net)} ΔE → ${fmt(s.dose.dose)} ppm·hr`}>
+      <Step key="6" n="6" title="Strip minus reference → dose" ok summary={`${fmt(s.dose.strip.dE)} − ${fmt(s.dose.reference.dE)} = ${fmt(s.dose.net)} ΔE → ${fmt(s.dose.dose)}${s.dose.doseErr != null ? ` ± ${fmt(s.dose.doseErr)}` : ''} ppm·hr`}>
         <div className="duo">
           <div>
             <b>Strip</b>
@@ -198,7 +198,8 @@ function Outcome({ out, worker }) {
           <div>
             <span className="eyebrow">Shift started · {fmtTime(outcome.shift.startAt)}</span>
             <div className="big-dose">
-              <CountUp value={result.dose} /> <small>ppm·hr on the pod</small>
+              <CountUp value={result.dose} />
+              {result.doseErr != null && <span className="pm"> ± {fmt(result.doseErr)}</span>} <small>ppm·hr on the pod</small>
             </div>
             <p className="muted">Saved for {worker.name}. Scan again at the end of the shift.</p>
           </div>
@@ -211,11 +212,13 @@ function Outcome({ out, worker }) {
               Shift ended · {fmtTime(outcome.shift.startAt)}–{fmtTime(outcome.shift.endAt)}
             </span>
             <div className="big-dose">
-              <CountUp value={outcome.dose} /> <small>ppm·hr this shift</small>
+              <CountUp value={outcome.dose} />
+              {outcome.doseErr != null && <span className="pm"> ± {fmt(outcome.doseErr)}</span>} <small>ppm·hr this shift</small>
             </div>
             <StatusChip status={outcome.status} />
             <p className="muted small">
               End {outcome.shift.endReading} − start {outcome.shift.startReading} = {outcome.dose} ppm·hr · 8-h TWA {fmt(outcome.dose / LIMITS.shiftHours)} ppm
+              {outcome.doseErr != null && ' · ± is how far the photos alone could move the reading (lab validation pending)'}
             </p>
             <DoseBullet dose={outcome.dose} />
           </div>

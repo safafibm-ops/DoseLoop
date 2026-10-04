@@ -28,7 +28,8 @@ describe('sample photos', () => {
       const st = (res ?? err).steps ?? {}
       console.log(
         s.file.padEnd(24),
-        res ? `dose ${res.dose.toFixed(1)} (true ${s.true_dose})` : `ERROR ${err.code}: ${err.message}`,
+        res ? `dose ${res.dose.toFixed(1)} ± ${res.doseErr.toFixed(1)} (true ${s.true_dose})` : `ERROR ${err.code}: ${err.message}`,
+        st.sampling?.uneven != null ? `uneven ${st.sampling.uneven.toFixed(2)}` : '',
         st.selfTest ? `selftest ${st.selfTest.dE.toFixed(2)}` : '',
         st.correction ? `fit ${st.correction.meanFitDE.toFixed(2)}` : '',
         st.checks ? `shutter ${st.checks.shutter} wick ${st.checks.wick.toFixed(2)}` : '',

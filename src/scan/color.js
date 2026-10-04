@@ -147,6 +147,72 @@ export function fitCorrection(samples) {
   }
 }
 
+const SCALE_REACH = 12 // ΔE: colours this far from the brown scale get about half of its fix
+
+/**
+ * Curve through the printed brown scale: the last, dose-specific part of the colour correction.
+ * The scale steps pass through the same printer, light and camera as the strip, so whatever is
+ * still off at each step (after `correctLab`) is known exactly. The steps are joined into a curve
+ * (in Lab, in dose order); a colour on or near it gets the fix of the nearest point on that curve,
+ * blended between the two steps around it. Colours far from the browns are left as they are.
+ * steps: [{ measured: sRGB, truth: sRGB }] in dose order. Returns a function rgb -> Lab.
+ */
+export function scaleCurve(correctLab, steps) {
+  const pts = steps.map((s) => {
+    const g = correctLab(s.measured)
+    const t = rgbToLab(s.truth)
+    return { g, res: [t[0] - g[0], t[1] - g[1], t[2] - g[2]] }
+  })
+  return (rgb) => {
+    const p = correctLab(rgb)
+    let best = null
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i].g, b = pts[i + 1].g
+      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+      const len2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1e-9
+      const u = Math.min(1, Math.max(0, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / len2))
+      const d = deltaE(p, [a[0] + u * ab[0], a[1] + u * ab[1], a[2] + u * ab[2]])
+      if (!best || d < best.d) best = { d, i, u }
+    }
+    if (!best) return p
+    const { d, i, u } = best
+    const w = Math.exp(-(d * d) / (2 * SCALE_REACH ** 2) * Math.LN2 * 2) // 1 on the curve, 0.5 at SCALE_REACH
+    const r0 = pts[i].res, r1 = pts[i + 1].res
+    return [0, 1, 2].map((k) => p[k] + w * (r0[k] + u * (r1[k] - r0[k])))
+  }
+}
+
+/**
+ * Reads a colour straight against the printed brown scale in the same photo (used for the strip and
+ * the reference cell). The 6 steps make a curve in the photo's own colours, step by step; the colour
+ * is placed on that curve (e.g. 40% of the way from the 25 to the 50 step) and the same place on the
+ * curve of TRUE step colours is its corrected colour. Whatever light, screen or camera did to the
+ * strip, it did to the browns next to it too, so this cancels out without any colour model.
+ * The small part of the colour that is off the curve is kept, scaled like the step it is next to.
+ * steps: [{ measured: sRGB, truth: sRGB }] in dose order. Returns a function rgb -> Lab.
+ */
+export function readAgainstScale(steps) {
+  const M = steps.map((s) => rgbToLab(s.measured))
+  const T = steps.map((s) => rgbToLab(s.truth))
+  return (rgb) => {
+    const p = rgbToLab(rgb)
+    let best = null
+    for (let i = 0; i + 1 < M.length; i++) {
+      const a = M[i], b = M[i + 1]
+      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+      const len2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1e-9
+      const u = Math.min(1, Math.max(0, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / len2))
+      const q = [a[0] + u * ab[0], a[1] + u * ab[1], a[2] + u * ab[2]]
+      const d = deltaE(p, q)
+      if (!best || d < best.d) best = { d, i, u, q }
+    }
+    const { i, u, q } = best
+    const t = [0, 1, 2].map((c) => T[i][c] + u * (T[i + 1][c] - T[i][c]))
+    const scale = Math.min(4, Math.max(0.5, deltaE(T[i], T[i + 1]) / Math.max(1e-3, deltaE(M[i], M[i + 1]))))
+    return [0, 1, 2].map((c) => t[c] + scale * (p[c] - q[c]))
+  }
+}
+
 export function interp(x, xs, ys) {
   if (x <= xs[0]) return ys[0]
   if (x >= xs[xs.length - 1]) return ys[ys.length - 1]

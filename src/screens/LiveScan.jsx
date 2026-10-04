@@ -178,9 +178,12 @@ function Visual({ stage, s, failed }) {
             <span className="lv-net">{fmt(s.dose.net)} ΔE</span>
           </div>
           <div className="lv-dose">
-            {fmt(s.dose.dose)} <small>ppm·hr on the pod</small>
+            {fmt(s.dose.dose)}
+            {s.dose.doseErr != null && <span className="pm"> ± {fmt(s.dose.doseErr)}</span>} <small>ppm·hr on the pod</small>
           </div>
-          <p className="small muted">Batch curve (placeholder until lab calibration)</p>
+          <p className="small muted">
+            Batch curve (placeholder until lab calibration).{s.dose.others && ' ± from reading the dose a second way and re-reading it 6 times, each without one brown step.'}
+          </p>
         </div>
       )
     case 'checks':
@@ -215,6 +218,8 @@ function caption(stage, s) {
           : 'QR signature does not match: copied or fake pod'
     case 'sampling': {
       if (s.sampling.glare) return `Glare on ${s.sampling.glare} area(s)`
+      if (s.sampling.blackSpread > s.sampling.blackLimit) return `Reflection over the pod: corners differ by ${fmt(s.sampling.blackSpread)} L*`
+      if (s.sampling.uneven > s.sampling.unevenLimit) return `Colour areas are streaky (${fmt(s.sampling.uneven)} ΔE): screen stripes or a reflection`
       const n = s.sampling.patches.length + s.sampling.scale.length + 2 - (s.sampling.skipped?.length ?? 0)
       const light = s.sampling.lightSpread > 1.15 ? `Evened out uneven light (${Math.round((s.sampling.lightSpread - 1) * 100)}% brighter on one side), ` : ''
       const skip = s.sampling.skipped?.length ? `, ${s.sampling.skipped.join(' & ')} over-exposed so left out` : ''
@@ -222,7 +227,7 @@ function caption(stage, s) {
     }
     case 'correction':
       return s.correction.meanGlobalDE != null
-        ? `Colour corrected for light and camera · average error ${fmt(s.correction.meanGlobalDE)} ΔE, ${fmt(s.correction.meanFitDE)} after the local fix`
+        ? `Colour corrected for light and camera · average error ${fmt(s.correction.meanGlobalDE)} ΔE, ${fmt(s.correction.meanFitDE)} after the fit through the 6 brown steps`
         : `Colour corrected for light and camera · ${fmt(s.correction.meanFitDE)} ΔE average error`
     case 'selfTest':
       return !s.selfTest.pass ? 'Self-test failed' : s.selfTest.good === false ? 'Self-test passed, lower confidence' : 'Self-test passed'

@@ -9,7 +9,7 @@ import C1 from './calibration/C1.json'
 import { evenLight } from './light.js'
 import { findMarkers } from './markers.js'
 import { orient, readQr } from './qr.js'
-import { deltaE, fitCorrection, hexToRgb, interp, rgbToHex, rgbToLab, toSrgb } from './color.js'
+import { deltaE, fitCorrection, hexToRgb, interp, labToRgb, readAgainstScale, rgbToHex, rgbToLab, scaleCurve, toSrgb } from './color.js'
 
 const CALIBRATIONS = { C1 }
 const PPM = 20 // pixels per mm in the flat (warped) pod view
@@ -17,6 +17,10 @@ const WORK_SIDE = 1600 // markers are found on a copy at most this big
 const FULL_SIDE = 3200 // the QR and colours are read from the photo at up to this size
 const SELF_TEST_MAX_DE = 3 // held-out brown within this: full confidence
 const SELF_TEST_RETAKE_DE = 6 // above this: retake. In between: the reading is kept, flagged as less certain
+const UNEVEN_RETAKE = 4 // median unevenness of the plain patches (ΔE) above this: stripes or reflection, retake
+const REFLECTION_RETAKE = 15 // corner blacks differing by more than this (L*): a reflection over the pod, retake
+const DOSE_RANGE_K = 1.5 // the ± range scales the two checks in the dose step by this (≈9 in 10 rescans land inside)
+const DOSE_RANGE_FLOOR = 0.5 // ppm·hr: smallest ± shown (the colour can't be read finer than this)
 const CLIP_LEVEL = 253
 const CLIP_MAX_FRACTION = 0.04
 
@@ -52,6 +56,26 @@ function dotCenters(rect) {
   for (let gx = x0 + pitch / 2; gx < x0 + w; gx += pitch)
     for (let gy = y0 + pitch / 2; gy < y0 + h; gy += pitch) pts.push([gx, gy])
   return pts
+}
+
+/**
+ * How uneven a plain printed patch looks (ΔE): 90th percentile of each pixel's distance from the
+ * patch's median colour, on a lightly smoothed copy so camera noise doesn't count. A clean photo
+ * gives about 1-2; screen stripes (moiré) or a reflection across the patch push it up.
+ */
+function unevenness(smooth, rect, inset = 0.2) {
+  const [x, y, w, h] = rect
+  const x0 = Math.round((x + w * inset) * PPM), x1 = Math.round((x + w * (1 - inset)) * PPM)
+  const y0 = Math.round((y + h * inset) * PPM), y1 = Math.round((y + h * (1 - inset)) * PPM)
+  const labs = []
+  for (let yy = y0; yy < y1; yy += 2)
+    for (let xx = x0; xx < x1; xx += 2) {
+      const i = (yy * smooth.width + xx) * 4
+      labs.push(rgbToLab([smooth.data[i], smooth.data[i + 1], smooth.data[i + 2]]))
+    }
+  const mid = [0, 1, 2].map((c) => median(labs.map((l) => l[c])))
+  const d = labs.map((l) => deltaE(l, mid)).sort((a, b) => a - b)
+  return d[Math.floor(d.length * 0.9)] ?? 0
 }
 
 /**
@@ -261,6 +285,25 @@ export function* scanStages(cv, imageData, { mode = 'start', today = new Date() 
 
     // 3. even out the light across the pod, then sample patches
     const light = evenLight(flat, PPM)
+    // the black ring of each corner marker (4 thin bands around its white hole)
+    const mk = SPEC.markers
+    const mid = (mk.size + mk.inner) / 4
+    const band = (mk.size - mk.inner) / 8
+    const cornerBlacks = (img) =>
+      mk.centers.map(([cx, cy]) => {
+        const v = [
+          [cx - mid, cy - mid - band, 2 * mid, 2 * band],
+          [cx - mid, cy + mid - band, 2 * mid, 2 * band],
+          [cx - mid - band, cy - mid, 2 * band, 2 * mid],
+          [cx + mid - band, cy - mid, 2 * band, 2 * mid],
+        ].map((r) => sampleRect(img, r, { inset: 0, raw: flat }).rgb)
+        return [0, 1, 2].map((c) => median(v.map((p) => p[c])))
+      })
+    // the 4 corners are the same black: if one looks much lighter than another, a reflection (a window
+    // or lamp mirrored in a screen or glossy paper) lies over part of the pod. It adds light, so unlike
+    // a shadow it can't be divided out, and it fades the colours under it unevenly.
+    const cornerL = cornerBlacks(light.image).map((rgb) => rgbToLab(rgb)[0])
+    const blackSpread = Math.max(...cornerL) - Math.min(...cornerL)
     const even = light.image
     const at = (rect, opts) => sampleRect(even, rect, { ...opts, raw: flat })
     const P = SPEC.patches
@@ -277,16 +320,8 @@ export function* scanStages(cv, imageData, { mode = 'start', today = new Date() 
     const strip = at(SPEC.strip, { inset: 0.08, holes: dotCenters(SPEC.strip), holeR: 0.85 })
     const reference = at(SPEC.reference, { inset: 0.08, holes: dotCenters(SPEC.reference), holeR: 0.95 })
     // the black of the corner markers: the darkest known colour, pins the bottom of the tone curve
-    const mk = SPEC.markers
-    const mid = (mk.size + mk.inner) / 4
-    const band = (mk.size - mk.inner) / 8
-    const ring = mk.centers.flatMap(([cx, cy]) => [
-      [cx - mid, cy - mid - band, 2 * mid, 2 * band],
-      [cx - mid, cy + mid - band, 2 * mid, 2 * band],
-      [cx - mid - band, cy - mid, 2 * band, 2 * mid],
-      [cx + mid - band, cy - mid, 2 * band, 2 * mid],
-    ]).map((r) => at(r, { inset: 0 }).rgb)
-    const black = [0, 1, 2].map((c) => median(ring.map((v) => v[c])))
+    const blacks = cornerBlacks(even)
+    const black = [0, 1, 2].map((c) => median(blacks.map((v) => v[c])))
 
     // glare on the strip, the reference or the browns spoils the reading; a bright patch that is
     // over-exposed (common for the white patch on a bright day) is just left out of the fit
@@ -294,6 +329,16 @@ export function* scanStages(cv, imageData, { mode = 'start', today = new Date() 
     const critical = [...scale6, strip, reference].filter(over)
     const skipped = patches.filter(over)
     const glare = [...critical, ...skipped]
+    // plain patches should look plain: stripes from photographing a screen (moiré) or a reflection
+    // sliding across the pod make them uneven, and then their colours can't be trusted
+    const evenMat = cv.matFromImageData(even)
+    const blurMat = new cv.Mat()
+    cv.GaussianBlur(evenMat, blurMat, new cv.Size(0, 0), 0.3 * PPM)
+    const smooth = matToImage(cv, blurMat)
+    evenMat.delete()
+    blurMat.delete()
+    for (const p of [...patches, ...scale6]) p.uneven = over(p) ? null : unevenness(smooth, p.rect)
+    const uneven = median([...patches, ...scale6].map((p) => p.uneven).filter((v) => v != null))
     yield done('sampling', {
       patches,
       scale: scale6,
@@ -303,37 +348,59 @@ export function* scanStages(cv, imageData, { mode = 'start', today = new Date() 
       lightSpread: light.spread,
       glare: critical.length + (skipped.length > 3 ? skipped.length : 0),
       skipped: skipped.map((p) => p.name),
+      uneven,
+      unevenLimit: UNEVEN_RETAKE,
+      blackSpread,
+      blackLimit: REFLECTION_RETAKE,
       glareRects: glare.map((g) => g.rect),
       size: SPEC.size_mm,
     })
     if (critical.length || skipped.length > 3)
       throw new ScanError('glare', 'Glare or overexposure on the pod. Tilt the phone slightly or move out of direct light, then retake.', steps)
+    if (blackSpread > REFLECTION_RETAKE)
+      throw new ScanError(
+        'glare',
+        'A reflection is lying over part of the pod (one corner looks lighter than the others). Tilt the phone or screen a little, or turn away from the window or lamp, then retake.',
+        steps,
+      )
+    if (uneven > UNEVEN_RETAKE)
+      throw new ScanError(
+        'moire',
+        'Stripes or a reflection on the pod. If you are scanning a screen, move a little further back or tilt the phone slightly; otherwise move out of direct light. Then retake.',
+        steps,
+      )
 
-    // 4. colour correction (browns weighted 3x, held-out brown not used)
-    const samples = [
+    // 4. colour correction: tone curve + 3x3 matrix + local fix from all the printed colours, then a
+    //    curve through the 6 brown steps. The strip and reference are read straight against the 6
+    //    browns (readAgainstScale). model(k) leaves brown step k out, for the self-test.
+    const base = [
       ...patches.filter((p) => !over(p)).map((p) => ({ measured: p.rgb, truth: p.truth, tone: p.neutral, weight: 1 })),
-      ...scale6.filter((s) => !s.holdout).map((s) => ({ measured: s.rgb, truth: s.truth, tone: false, weight: 3 })),
       { measured: black, truth: hexToRgb(SPEC.black), tone: true, weight: 1 },
       // the pod's plain background: a big, well-lit grey that every photo has
       ...(light.background && light.clipped < 0.1 ? [{ measured: light.background, truth: hexToRgb(SPEC.background), tone: true, weight: 2 }] : []),
     ]
-    const corr = fitCorrection(samples)
+    const model = (leave) => {
+      const browns = scale6.filter((_, k) => k !== leave)
+      const steps = browns.map((b) => ({ measured: b.rgb, truth: b.truth }))
+      const corr = fitCorrection([...base, ...browns.map((b) => ({ measured: b.rgb, truth: b.truth, tone: false, weight: 3 }))])
+      return { corr, lab: scaleCurve(corr.correctLab, steps), strip: readAgainstScale(steps) }
+    }
+    const best = model()
+    const corr = best.corr
     if (![...corr.matrix.flat(), ...corr.toneLut.flatMap((t) => [...t])].every(Number.isFinite))
       throw new ScanError('selftest', 'Colour correction could not be fitted. Retake in even light.', steps)
-    const show = (p) => ({
-      name: p.name,
-      measured: rgbToHex(p.rgb),
-      corrected: rgbToHex(corr.correct(p.rgb)),
-      truth: rgbToHex(p.truth),
-      dE: deltaE(corr.correctLab(p.rgb), rgbToLab(p.truth)),
-    })
-    const fitted = [...patches, ...scale6.filter((s) => !s.holdout)].map(show)
-    const held = show(scale6.find((s) => s.holdout))
+    const heldModel = model(S.holdout)
+    const show = (p, m = best) => {
+      const lab = m.lab(p.rgb)
+      return { name: p.name, measured: rgbToHex(p.rgb), corrected: rgbToHex(labToRgb(lab)), truth: rgbToHex(p.truth), dE: deltaE(lab, rgbToLab(p.truth)) }
+    }
+    const fitted = [...patches, ...scale6].map((p) => show(p))
+    const held = show(scale6[S.holdout], heldModel)
     yield done('correction', {
-      table: [...patches, ...scale6].map(show),
+      table: [...patches, ...scale6].map((p) => (p.holdout ? held : show(p))),
       meanFitDE: fitted.reduce((s, p) => s + p.dE, 0) / fitted.length,
-      // the same before the local fix (tone curve + matrix only)
-      meanGlobalDE: [...patches, ...scale6.filter((s) => !s.holdout)].reduce((s, p) => s + deltaE(corr.globalLab(p.rgb), rgbToLab(p.truth)), 0) / fitted.length,
+      // the same with tone curve + matrix only (before the local fix and the brown-scale curve)
+      meanGlobalDE: [...patches, ...scale6].reduce((s, p) => s + deltaE(corr.globalLab(p.rgb), rgbToLab(p.truth)), 0) / fitted.length,
       holdout: held,
       matrix: corr.matrix,
       image: correctImage(even, corr),
@@ -353,24 +420,41 @@ export function* scanStages(cv, imageData, { mode = 'start', today = new Date() 
 
     // 6. dose
     const ink0 = cal.ink0_lab
-    const stripLab = corr.correctLab(strip.rgb)
-    const refLab = corr.correctLab(reference.rgb)
-    const dEs = deltaE(stripLab, ink0)
-    const dEr = deltaE(refLab, ink0)
-    const net = dEs - dEr
-    const dose = Math.max(0, interp(net, cal.x, cal.y))
+    const read = (m) => {
+      const stripLab = m.strip(strip.rgb)
+      const refLab = m.strip(reference.rgb)
+      const dEs = deltaE(stripLab, ink0)
+      const dEr = deltaE(refLab, ink0)
+      return { stripLab, refLab, dEs, dEr, net: dEs - dEr, dose: Math.max(0, interp(dEs - dEr, cal.x, cal.y)) }
+    }
+    const r = read(best)
+    // ± range, from two checks:
+    //  - read the dose a second way: strip and reference through the full colour correction instead
+    //    of straight against the browns. Two independent readings that disagree mean an odd photo.
+    //  - redo that second reading 6 times, each without one brown step ("jackknife"). If the browns
+    //    agree with each other the answers barely move; glare, stripes or odd light make them spread.
+    const viaCorrection = (m) => read({ strip: m.lab }).dose
+    const second = viaCorrection(best)
+    const others = scale6.map((_, k) => viaCorrection(k === S.holdout ? heldModel : model(k)))
+    const avg = others.reduce((a, b) => a + b, 0) / others.length
+    const spread = Math.sqrt(((others.length - 1) / others.length) * others.reduce((a, b) => a + (b - avg) ** 2, 0))
+    const doseErr = Math.hypot(DOSE_RANGE_K * spread, DOSE_RANGE_K * (r.dose - second), DOSE_RANGE_FLOOR)
+    const dose = r.dose
     yield done('dose', {
-      strip: { measured: rgbToHex(strip.rgb), corrected: rgbToHex(corr.correct(strip.rgb)), lab: stripLab, dE: dEs },
-      reference: { measured: rgbToHex(reference.rgb), corrected: rgbToHex(corr.correct(reference.rgb)), lab: refLab, dE: dEr },
+      strip: { measured: rgbToHex(strip.rgb), corrected: rgbToHex(labToRgb(r.stripLab)), lab: r.stripLab, dE: r.dEs },
+      reference: { measured: rgbToHex(reference.rgb), corrected: rgbToHex(labToRgb(r.refLab)), lab: r.refLab, dE: r.dEr },
       ink0: rgbToHex(hexToRgb(SPEC.ink.colors[0])),
-      net,
+      net: r.net,
       dose,
+      doseErr,
+      second,
+      others,
       curve: cal,
     })
 
     // 7. checks: shutter, expiry, capacity
     const sd = SPEC.shutterDots
-    const dot = (c) => corr.correctLab(at([c[0] - sd.r * 0.6, c[1] - sd.r * 0.6, sd.r * 1.2, sd.r * 1.2], { inset: 0 }).rgb)
+    const dot = (c) => best.lab(at([c[0] - sd.r * 0.6, c[1] - sd.r * 0.6, sd.r * 1.2, sd.r * 1.2], { inset: 0 }).rgb)
     const openLab = dot(sd.open), closedLab = dot(sd.closed)
     const isGreen = (l) => l[1] < -20, isRed = (l) => l[1] > 25
     const shutter = isGreen(openLab) && !isRed(closedLab) ? 'open' : isRed(closedLab) && !isGreen(openLab) ? 'closed' : 'unclear'
@@ -380,7 +464,7 @@ export function* scanStages(cv, imageData, { mode = 'start', today = new Date() 
     let filled = 0
     for (let k = 0; k < cols; k++) {
       const x = wx + 0.2 + ((ww - 0.9) * (k + 0.5)) / cols
-      const lab = corr.correctLab(at([x - 0.1, wy + wh * 0.3, 0.2, wh * 0.4], { inset: 0 }).rgb)
+      const lab = best.lab(at([x - 0.1, wy + wh * 0.3, 0.2, wh * 0.4], { inset: 0 }).rgb)
       if (lab[2] < -25) filled = k + 1
       else break
     }
@@ -393,7 +477,7 @@ export function* scanStages(cv, imageData, { mode = 'start', today = new Date() 
     if (mode === 'start' && shutter !== 'open')
       throw new ScanError('shutter', 'Shutter is not open (no green dot). Slide the shutter open, then scan again.', steps)
 
-    return { ok: true, pod, dose, mode, steps, warnings: warnings(steps, mode) }
+    return { ok: true, pod, dose, doseErr, mode, steps, warnings: warnings(steps, mode) }
   } finally {
     full.delete()
     work.delete()
