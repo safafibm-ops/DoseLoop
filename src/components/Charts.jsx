@@ -1,6 +1,7 @@
 // Small hand-made SVG charts with hover/focus tooltips.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { STATUS } from '../data/limits.js'
+import { TONE } from './tokens.js'
 
 export function useWidth(fallback = 320) {
   const ref = useRef(null)
@@ -38,7 +39,7 @@ const TipBody = ({ value, title, sub, status }) => (
     <span>{title}</span>
     {sub && <span className="muted">{sub}</span>}
     {status && (
-      <span style={{ color: STATUS[status].color }}>
+      <span className={`tip-status tone-${status}`}>
         {STATUS[status].icon} {STATUS[status].label}
       </span>
     )}
@@ -73,7 +74,7 @@ export function BarChart({ bars, refs = [], height = 190, unit = 'ppm·hr', onBa
           const h = Math.max(b.value > 0 ? 2 : 0, y(0) - y(b.value))
           const w = Math.max(2, bw - 3)
           const r = Math.min(4, w / 2, h)
-          const color = STATUS[b.status]?.color ?? '#3987e5'
+          const color = TONE[b.status] ?? TONE.info
           const top = y(0) - h
           return (
             <g
@@ -118,7 +119,7 @@ export function BarChart({ bars, refs = [], height = 190, unit = 'ppm·hr', onBa
 }
 
 /** Ring gauge for a single headline number (e.g. pod capacity). */
-export function Ring({ value, max, size = 120, label, sub, color = '#ff6a13', marker }) {
+export function Ring({ value, max, size = 120, label, sub, color = TONE.info, marker }) {
   const r = size / 2 - 9
   const c = 2 * Math.PI * r
   const f = Math.max(0, Math.min(1, value / max))
@@ -213,7 +214,7 @@ export function Heatmap({ rows, cols, cell, max = 40, onRowClick }) {
         </span>
         <span>0 → {max}+ ppm·hr</span>
         <span>
-          <b style={{ color: STATUS.caution.color }}>!</b> caution · <b style={{ color: STATUS.over.color }}>✕</b> over limit
+          <b className="tone-text-caution">!</b> caution · <b className="tone-text-over">✕</b> over limit
         </span>
       </div>
       {tip.el}

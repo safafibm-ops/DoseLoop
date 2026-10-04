@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { CountUp } from '../components/Charts.jsx'
-import { DemoNote, fmtTime, SeverityChip, StatusChip } from '../components/ui.jsx'
+import CameraScan from '../components/CameraScan.jsx'
+import { DemoNote, fmtTime, Icon, SeverityChip } from '../components/ui.jsx'
+import { STATUS_ICON, STATUS_TONE } from '../components/tokens.js'
 import { LIMITS, SHELF_DAYS } from '../data/limits.js'
+import { isNativeApp } from '../native.js'
 import { openShiftFor, workerById } from '../data/log.js'
 import { TOUR, useStore } from '../data/store.jsx'
 import { STAGES } from '../scan/pipeline.js'
@@ -42,12 +45,16 @@ function Step({ n, title, summary, ok, children, open: startOpen = false }) {
   return (
     <section className={`step-card reveal ${ok === false ? 'failed' : ''}`}>
       <button className="step-head" onClick={() => setOpen(!open)} aria-expanded={open} disabled={!children}>
-        <span className={`badge ${ok === false ? 'bad' : ok ? 'good' : ''}`}>{ok === false ? '✕' : ok ? '✓' : n}</span>
+        <span className={`badge ${ok === false ? 'bad' : ok ? 'good' : ''}`} aria-label={ok === false ? 'Failed' : ok ? 'Passed' : `Step ${n}`}>
+          {ok === false ? <Icon name="x" size={16} /> : ok ? <Icon name="check" size={16} /> : n}
+        </span>
         <span className="step-text">
-          <b>{title}</b>
+          <b>
+            {n}. {title}
+          </b>
           <span>{summary}</span>
         </span>
-        {children && <span className="chev">{open ? '−' : '+'}</span>}
+        {children && <Icon name={open ? 'up' : 'down'} size={22} className="chev" />}
       </button>
       {open && children && <div className="step-body">{children}</div>}
     </section>
@@ -89,11 +96,11 @@ function pipelineSteps(s, error, logged) {
     )
   if (s.sampling)
     steps.push(
-      <Step key="3" n="3" title="Read the colours" ok={!s.sampling.glare} summary={s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : `${s.sampling.patches.length + s.sampling.scale.length + 2} areas sampled, no glare`} />,
+      <Step key="3" n="3" title="Read the colours" ok={!s.sampling.glare} summary={s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : `${s.sampling.patches.length + s.sampling.scale.length + 2 - (s.sampling.skipped?.length ?? 0)} areas sampled, light evened out${s.sampling.skipped?.length ? `, ${s.sampling.skipped.join(' & ')} over-exposed (left out)` : ''}`} />,
     )
   if (s.correction)
     steps.push(
-      <Step key="4" n="4" title="Correct for light and camera" ok summary={`Tone curve + 3×3 matrix · average error ${fmt(s.correction.meanFitDE)} ΔE`}>
+      <Step key="4" n="4" title="Correct for light and camera" ok summary={`Tone curve + 3×3 matrix (average error ${fmt(s.correction.meanGlobalDE)} ΔE), then a local fix from the printed browns (${fmt(s.correction.meanFitDE)} ΔE)`}>
         <table className="ctable">
           <thead>
             <tr>
@@ -120,7 +127,13 @@ function pipelineSteps(s, error, logged) {
     )
   if (s.selfTest)
     steps.push(
-      <Step key="5" n="5" title="Self-test" ok={s.selfTest.pass} summary={`Held-out 25 ppm·hr brown is ${fmt(s.selfTest.dE)} ΔE off (limit ${s.selfTest.limit})`} />,
+      <Step
+        key="5"
+        n="5"
+        title="Self-test"
+        ok={s.selfTest.pass}
+        summary={`Held-out 25 ppm·hr brown is ${fmt(s.selfTest.dE)} ΔE off (best under ${s.selfTest.limit}, retake over ${s.selfTest.retake})${s.selfTest.good === false ? ' · lower confidence' : ''}`}
+      />,
     )
   if (s.dose)
     steps.push(
@@ -157,80 +170,152 @@ function pipelineSteps(s, error, logged) {
 }
 
 const ERROR_TITLE = { fake: 'Pod rejected: not genuine', expired: 'Pod expired', shutter: 'Open the shutter', image: 'Cannot use this photo' }
+const ERROR_NEXT = {
+  fake: 'Do not use this pod. Ask your supervisor for a genuine one.',
+  expired: 'Do not use this pod. Ask your supervisor for a new one.',
+  shutter: 'Slide the shutter open until the green dot shows, then scan again.',
+  image: 'Retake the photo in even light, with the whole pod in view.',
+}
+const NEXT_STEP = {
+  ok: 'Below the shift limit. No action needed.',
+  caution: 'Over half the shift limit. Tell your supervisor.',
+  over: `Above the ${LIMITS.shiftIndia} ppm·hr shift limit. Report to your supervisor now.`,
+}
 
-function Outcome({ out, worker }) {
-  const { result, error, outcome, alert } = out
-  if (error)
-    return (
-      <div className="outcome bad reveal">
-        <div className="outcome-icon">✕</div>
-        <div>
-          <b>{ERROR_TITLE[error.code] ?? 'Retake the photo'}</b>
-          <p>{error.message}</p>
-          {alert && <p className="small">Reported to the supervisor as a {alert.severity} alert.</p>}
-        </div>
-      </div>
-    )
-  if (outcome?.kind === 'error')
-    return (
-      <div className="outcome warn reveal">
-        <div className="outcome-icon">!</div>
-        <div>
-          <b>Not logged</b>
-          <p>{outcome.message}</p>
-        </div>
-      </div>
-    )
-  const raised = outcome?.alerts ?? []
+// "± 0.6" when the scan reports an uncertainty for the dose
+const plusMinus = (u) => (Number.isFinite(u) && u > 0 ? <span className="result-unc">± {fmt(u)}</span> : null)
+
+function Notices({ raised, warnings }) {
+  if (!raised.length && !warnings.length) return null
   return (
-    <div className={`outcome ${outcome.kind === 'end' ? outcome.status : 'good'} reveal`}>
-      {outcome.kind === 'start' ? (
-        <>
-          <div className="outcome-icon">▶</div>
-          <div>
-            <span className="eyebrow">Shift started · {fmtTime(outcome.shift.startAt)}</span>
-            <div className="big-dose">
-              <CountUp value={result.dose} /> <small>ppm·hr on the pod</small>
-            </div>
-            <p className="muted">Saved for {worker.name}. Scan again at the end of the shift.</p>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="outcome-icon">■</div>
-          <div>
-            <span className="eyebrow">
-              Shift ended · {fmtTime(outcome.shift.startAt)}–{fmtTime(outcome.shift.endAt)}
-            </span>
-            <div className="big-dose">
-              <CountUp value={outcome.dose} /> <small>ppm·hr this shift</small>
-            </div>
-            <StatusChip status={outcome.status} />
-            <p className="muted small">
-              End {outcome.shift.endReading} − start {outcome.shift.startReading} = {outcome.dose} ppm·hr · 8-h TWA {fmt(outcome.dose / LIMITS.shiftHours)} ppm
-            </p>
-            <DoseBullet dose={outcome.dose} />
-          </div>
-        </>
-      )}
+    <ul className="result-notices">
       {raised.map((a) => (
-        <div key={a.id} className="raised">
-          <SeverityChip severity={a.severity} /> <b>{a.title}</b> <span>{a.detail}</span>
-        </div>
+        <li key={a.id}>
+          <SeverityChip severity={a.severity} />
+          <span>
+            <b>{a.title}</b> {a.detail}
+          </span>
+        </li>
       ))}
-      {result.warnings.map((w) => (
-        <div key={w} className="raised">
-          <SeverityChip severity="warning" /> <span>{w}</span>
-        </div>
+      {warnings.map((w) => (
+        <li key={w}>
+          <SeverityChip severity="warning" />
+          <span>{w}</span>
+        </li>
       ))}
-    </div>
+    </ul>
   )
 }
 
-// Opens a photo (file, camera shot or sample URL) as pixels, at most 1600 px on the long side.
-// createImageBitmap applies the phone's EXIF rotation; the <img> route is the fallback.
+function Outcome({ out, worker, onRetake }) {
+  const { result, error, outcome, alert } = out
+  if (error)
+    return (
+      <section className="result tone-over reveal" role="alert">
+        <header className="result-band">
+          <Icon name="stop" size={28} />
+          <b>{ERROR_TITLE[error.code] ?? 'Retake the photo'}</b>
+        </header>
+        <div className="result-body">
+          <p className="result-msg">{error.message}</p>
+          <p className="result-next">{ERROR_NEXT[error.code] ?? ERROR_NEXT.image}</p>
+          {alert && (
+            <p className="muted small">
+              <Icon name="bell" size={16} /> Reported to the supervisor as a {alert.severity} alert.
+            </p>
+          )}
+          <button className="btn primary block" onClick={onRetake}>
+            <Icon name="camera" size={22} /> Scan again
+          </button>
+        </div>
+      </section>
+    )
+  if (outcome?.kind === 'error')
+    return (
+      <section className="result tone-caution reveal" role="alert">
+        <header className="result-band">
+          <Icon name="alert" size={28} />
+          <b>Not logged</b>
+        </header>
+        <div className="result-body">
+          <p className="result-msg">{outcome.message}</p>
+          <Notices raised={outcome.alerts ?? []} warnings={[]} />
+        </div>
+      </section>
+    )
+  const raised = outcome?.alerts ?? []
+  if (outcome.kind === 'start')
+    return (
+      <section className="result tone-info reveal" aria-live="polite">
+        <header className="result-band">
+          <Icon name="play" size={26} />
+          <b>Shift started</b>
+          <span className="result-when">
+            <Icon name="clock" size={18} /> {fmtTime(outcome.shift.startAt)}
+          </span>
+        </header>
+        <div className="result-body">
+          <div className="result-dose">
+            <span className="result-num">
+              <CountUp value={result.dose} />
+            </span>
+            {plusMinus(result.uncertainty)}
+            <span className="result-unit">ppm·hr on the pod at start</span>
+          </div>
+          <p className="result-next">Saved for {worker.name}. Scan again at the end of the shift.</p>
+          <Notices raised={raised} warnings={result.warnings} />
+        </div>
+      </section>
+    )
+  const tone = STATUS_TONE[outcome.status]
+  return (
+    <section className={`result tone-${tone} reveal`} aria-live="polite">
+      <header className="result-band">
+        <Icon name={STATUS_ICON[outcome.status]} size={28} />
+        <b>
+          {outcome.status === 'ok' ? 'Safe' : outcome.status === 'caution' ? 'Caution' : 'Over limit'}
+        </b>
+        <span className="result-when">
+          <Icon name="clock" size={18} /> {fmtTime(outcome.shift.startAt)}–{fmtTime(outcome.shift.endAt)}
+        </span>
+      </header>
+      <div className="result-body">
+        <div className="result-dose">
+          <span className="result-num">
+            <CountUp value={outcome.dose} />
+          </span>
+          {plusMinus(outcome.uncertainty ?? result.uncertainty)}
+          <span className="result-unit">ppm·hr this shift</span>
+        </div>
+        <p className="result-next">{NEXT_STEP[outcome.status]}</p>
+        <DoseBullet dose={outcome.dose} />
+        <dl className="result-facts">
+          <div>
+            <dt>8-h TWA</dt>
+            <dd>{fmt(outcome.dose / LIMITS.shiftHours)} ppm</dd>
+          </div>
+          <div>
+            <dt>Pod reading</dt>
+            <dd>
+              {outcome.shift.startReading} → {outcome.shift.endReading}
+            </dd>
+          </div>
+          <div>
+            <dt>Shift limit</dt>
+            <dd>{LIMITS.shiftIndia} ppm·hr</dd>
+          </div>
+        </dl>
+        <Notices raised={raised} warnings={result.warnings} />
+      </div>
+    </section>
+  )
+}
+
+// Opens a photo (file, camera frame or sample URL) as pixels, at most 3200 px on the long side
+// (full detail for the QR code). createImageBitmap applies the phone's EXIF rotation; <img> is the fallback.
 async function fileToImageData(src) {
-  const MAX = 1600
+  if (typeof ImageData !== 'undefined' && src instanceof ImageData) return src
+  const MAX = 3200
   const draw = (w, h, paint) => {
     const k = Math.min(1, MAX / Math.max(w, h))
     const c = document.createElement('canvas')
@@ -274,8 +359,11 @@ export default function Scan() {
   const [samples, setSamples] = useState([])
   const [scan, setScan] = useState(null) // { steps, arrived: [stage], shown: n, running, end: {result|error,…} }
   const [allSteps, setAllSteps] = useState(false)
+  const [camera, setCamera] = useState(false)
+  const nativeCam = useRef(null)
   const liveRef = useRef(null)
   const outcomeRef = useRef(null)
+  const topRef = useRef(null)
   const runId = useRef(0)
   const tourSample = state.tour ? TOUR[state.tour.step]?.sample : null
 
@@ -351,30 +439,57 @@ export default function Scan() {
 
   return (
     <>
-      <section className="card scan-top">
-        <div className="toggle" role="group" aria-label="Scan type">
+      <section className="card scan-top" ref={topRef}>
+        <div className="scan-head">
+          <h2>{mode === 'start' ? 'Start of shift scan' : 'End of shift scan'}</h2>
+          <span className={`shift-state ${open ? 'on' : ''}`}>
+            <i aria-hidden="true" /> {open ? `On shift since ${fmtTime(open.startAt)}` : 'Off shift'}
+          </span>
+        </div>
+        <div className="segmented wide" role="group" aria-label="Scan type">
           {['start', 'end'].map((m) => (
-            <button key={m} className={mode === m ? 'on' : ''} onClick={() => setOverride(m)} disabled={busy}>
-              Shift {m}
+            <button key={m} className={mode === m ? 'on' : ''} aria-pressed={mode === m} onClick={() => setOverride(m)} disabled={busy}>
+              {m === 'start' ? <Icon name="play" size={18} /> : <Icon name="square" size={18} />} Shift {m}
             </button>
           ))}
         </div>
-        <p className="muted small">
-          {open ? `On shift since ${fmtTime(open.startAt)}. Scan to end it.` : 'Off shift. Open the shutter (green dot) and scan to start.'}
-        </p>
-        <div className="actions">
-          <label className={`cta small-cta ${busy ? 'disabled' : ''}`}>
-            📷 Camera
-            <input type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy} hidden />
-          </label>
-          <label className={`cta secondary small-cta ${busy ? 'disabled' : ''}`}>
-            Upload photo
+        <p className="muted">{open ? 'Scan the pod to end the shift.' : 'Open the shutter (green dot), then scan the pod.'}</p>
+        <div className="scan-actions">
+          <button className="btn primary lg" onClick={() => setCamera(true)} disabled={busy} data-coach="camera">
+            <Icon name="camera" size={24} /> Open camera
+          </button>
+          <input ref={nativeCam} type="file" accept="image/*" capture="environment" onChange={onFile} hidden />
+          <label className={`btn secondary lg ${busy ? 'disabled' : ''}`}>
+            <Icon name="upload" size={22} /> Upload photo
             <input type="file" accept="image/*" onChange={onFile} disabled={busy} hidden />
           </label>
         </div>
+        {!isNativeApp() && (
+          <p className="small muted print-tip">
+            <Icon name="print" size={18} /> No pod?{' '}
+            <a href="print/doseloop-test-badges.pdf" target="_blank" rel="noopener">
+              Print the test badges (A4 PDF)
+            </a>{' '}
+            and show them to the camera.
+          </p>
+        )}
       </section>
 
       {busy && <span data-coach-busy hidden />}
+
+      {camera && (
+        <CameraScan
+          onCapture={(frame) => {
+            setCamera(false)
+            run(frame)
+          }}
+          onClose={() => setCamera(false)}
+          onFallback={() => {
+            setCamera(false)
+            nativeCam.current?.click()
+          }}
+        />
+      )}
 
       {scan && (
         <div className="results" ref={liveRef}>
@@ -389,8 +504,10 @@ export default function Scan() {
           {cards.length > 0 && (
             <section className={`steps-drop ${allSteps ? 'open' : ''}`}>
               <button className="steps-toggle" onClick={() => setAllSteps(!allSteps)} aria-expanded={allSteps}>
-                <span>{allSteps ? `All ${cards.length} steps` : finished ? `Step ${cards.length} · last step` : `Step ${cards.length} · working now`}</span>
-                <span className="chev">{allSteps ? 'Hide ▴' : `Show all ${cards.length} ▾`}</span>
+                <span>{allSteps ? `All ${cards.length} steps` : finished ? `Step ${cards.length}, last step` : `Step ${cards.length}, working now`}</span>
+                <span className="steps-more">
+                  {allSteps ? 'Hide steps' : `Show all ${cards.length}`} <Icon name={allSteps ? 'up' : 'down'} size={18} />
+                </span>
               </button>
               {allSteps ? cards : cards[cards.length - 1]}
             </section>
@@ -398,18 +515,28 @@ export default function Scan() {
 
           {finished && (
             <div ref={outcomeRef}>
-              <Outcome out={out} worker={worker} />
+              <Outcome
+                out={out}
+                worker={worker}
+                onRetake={() => {
+                  topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  setCamera(true)
+                }}
+              />
             </div>
           )}
           {finished && out.sample && (
-            <p className="small center">
+            <p className="small muted center">
               Sample photo: {out.sample.title} ({out.sample.light}) · true simulated dose {out.sample.true_dose} ppm·hr
             </p>
           )}
         </div>
       )}
 
-      <h3 className="section-title">Sample photos (no pod needed)</h3>
+      <div className="section-head">
+        <h3 className="section-title">Sample photos</h3>
+        <span className="muted small">No pod needed. Tap one to scan it.</span>
+      </div>
       <div className="samples">
         {ordered.map((s) => (
           <button
@@ -420,7 +547,7 @@ export default function Scan() {
             disabled={busy}
           >
             <img src={`samples/${s.file}`} alt="" loading="lazy" />
-            <span>{s.title}</span>
+            <span className="sample-title">{s.title}</span>
             <span className="small muted">{s.light}</span>
           </button>
         ))}

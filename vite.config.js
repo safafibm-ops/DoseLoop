@@ -16,14 +16,14 @@ export default defineConfig({
       workbox: {
         // the scan worker (OpenCV.js inside) is ~16 MB; cache it and the sample photos so the demo works offline
         maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,json}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,json,pdf,woff2}'], // woff2: bundled fonts
       },
       manifest: {
         name: 'DoseLoop – H₂S Dose Reader',
         short_name: 'DoseLoop',
         description: 'Reads a photo of the passive H₂S pod and logs each worker’s shift dose (ppm·hr).',
-        theme_color: '#ff6a13',
-        background_color: '#111111',
+        theme_color: '#1a2027',
+        background_color: '#eef1f4',
         display: 'standalone',
         start_url: '/',
         icons: [

@@ -1,5 +1,6 @@
 // The live scan view: shows what the scan engine is doing, stage by stage, on the photo itself.
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from '../components/ui.jsx'
 
 // frame size for a w×h picture: full width, but never taller than 340 px
 const frame = (w, h, extra) => ({ aspectRatio: `${w} / ${h}`, '--ar': w / h, ...extra })
@@ -78,6 +79,7 @@ function Compare({ before, after, sweep }) {
 
 /** Flat pod view with every sampled area outlined. */
 function SampleMap({ flat, sampling }) {
+  flat = sampling.even ?? flat // the view with the light evened out
   const [W, H] = sampling.size
   const areas = [...sampling.patches, ...sampling.scale, { ...sampling.strip, name: 'strip' }, { ...sampling.reference, name: 'reference' }]
   const bad = new Set(sampling.glareRects.map((r) => r.join()))
@@ -101,7 +103,13 @@ function SampleMap({ flat, sampling }) {
   )
 }
 
-const Chip = ({ ok, children }) => <span className={`lv-chip ${ok === false ? 'bad' : ok === 'warn' ? 'warn' : 'good'}`}>{children}</span>
+// result chip: icon + text, so pass/warn/fail never depends on colour alone
+const Chip = ({ ok, children }) => (
+  <span className={`lv-chip ${ok === false ? 'bad' : ok === 'warn' ? 'warn' : 'good'}`}>
+    <Icon name={ok === false ? 'x' : ok === 'warn' ? 'alert' : 'check'} size={16} />
+    {children}
+  </span>
+)
 
 /** What the big panel shows for one stage. */
 function Visual({ stage, s, failed }) {
@@ -130,9 +138,9 @@ function Visual({ stage, s, failed }) {
           </div>
           <div className="lv-qr-result">
             {s.qr.text ? (
-              <Chip ok={!!s.qr.valid}>{s.qr.valid ? `✓ Genuine · ${s.qr.serial}` : '✕ Signature does not match'}</Chip>
+              <Chip ok={!!s.qr.valid}>{s.qr.valid ? `Genuine · ${s.qr.serial}` : 'Signature does not match'}</Chip>
             ) : (
-              <Chip ok={false}>✕ QR not readable</Chip>
+              <Chip ok={false}>QR not readable</Chip>
             )}
             <span className="small muted">Ed25519 signature, checked offline</span>
           </div>
@@ -149,13 +157,13 @@ function Visual({ stage, s, failed }) {
           <p className="small muted">Held-out 25 ppm·hr brown (not used for the fit)</p>
           <div className="lv-sw-row">
             <span className="lv-sw" style={{ background: h.measured }}>Photo</span>
-            <span className="lv-arrow">→</span>
+            <span className="lv-arrow" aria-hidden="true">→</span>
             <span className="lv-sw" style={{ background: h.corrected }}>Corrected</span>
             <span className="lv-arrow">≈</span>
             <span className="lv-sw" style={{ background: h.truth }}>Printed</span>
           </div>
-          <Chip ok={s.selfTest.pass}>
-            {s.selfTest.pass ? '✓' : '✕'} {fmt(s.selfTest.dE)} ΔE off (limit {s.selfTest.limit})
+          <Chip ok={s.selfTest.good ?? s.selfTest.pass ? true : s.selfTest.pass ? 'warn' : false}>
+            {fmt(s.selfTest.dE)} ΔE off (best under {s.selfTest.limit}, retake over {s.selfTest.retake})
           </Chip>
         </div>
       )
@@ -207,13 +215,24 @@ function caption(stage, s) {
       return `Straightened: rotated ${Math.abs(Math.round(s.flat.rotation))}°, perspective tilt ${Math.round(s.flat.tilt * 100)}% corrected`
     }
     case 'qr':
-      return !s.qr.text ? 'QR code not readable' : s.qr.valid ? 'Genuine pod: QR signature verified' : 'QR signature does not match: copied or fake pod'
-    case 'sampling':
-      return s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : `Sampled ${s.sampling.patches.length + s.sampling.scale.length + 2} colour areas, no glare`
+      return !s.qr.text
+        ? `QR code not readable (${s.qr.tries ?? 1} ways tried)`
+        : s.qr.valid
+          ? `Genuine pod: QR signature verified${s.qr.tries > 1 ? ` (read on try ${s.qr.tries})` : ''}`
+          : 'QR signature does not match: copied or fake pod'
+    case 'sampling': {
+      if (s.sampling.glare) return `Glare on ${s.sampling.glare} area(s)`
+      const n = s.sampling.patches.length + s.sampling.scale.length + 2 - (s.sampling.skipped?.length ?? 0)
+      const light = s.sampling.lightSpread > 1.15 ? `Evened out uneven light (${Math.round((s.sampling.lightSpread - 1) * 100)}% brighter on one side), ` : ''
+      const skip = s.sampling.skipped?.length ? `, ${s.sampling.skipped.join(' & ')} over-exposed so left out` : ''
+      return `${light}${light ? 's' : 'S'}ampled ${n} colour areas${skip}`
+    }
     case 'correction':
-      return `Colour corrected for light and camera · ${fmt(s.correction.meanFitDE)} ΔE average error`
+      return s.correction.meanGlobalDE != null
+        ? `Colour corrected for light and camera · average error ${fmt(s.correction.meanGlobalDE)} ΔE, ${fmt(s.correction.meanFitDE)} after the local fix`
+        : `Colour corrected for light and camera · ${fmt(s.correction.meanFitDE)} ΔE average error`
     case 'selfTest':
-      return s.selfTest.pass ? 'Self-test passed' : 'Self-test failed'
+      return !s.selfTest.pass ? 'Self-test failed' : s.selfTest.good === false ? 'Self-test passed, lower confidence' : 'Self-test passed'
     case 'dose':
       return 'Strip minus reference → dose'
     case 'checks':

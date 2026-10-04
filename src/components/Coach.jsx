@@ -1,4 +1,4 @@
-// Glass pop-up that points at the one button the judge should press next.
+// Pop-up that points at the one button the judge should press next.
 // The button is found by its data-coach="..." attribute; the pop-up follows it while the page scrolls.
 // If the button is off screen, a pill at the screen edge points to it (tapping it scrolls there and presses it).
 import { useEffect, useRef, useState } from 'react'
@@ -19,6 +19,7 @@ function screenArea() {
   for (const el of document.querySelectorAll('.topbar, .tabbar')) {
     const r = el.getBoundingClientRect()
     if (!r.height || r.bottom <= 0 || r.top >= vh) continue
+    if (r.height > r.width) continue // side navigation rail on wide screens: not a top or bottom bar
     if (r.top + r.height / 2 < vh / 2) top = Math.max(top, Math.round(r.bottom))
     else bottom = Math.min(bottom, Math.round(r.top))
   }

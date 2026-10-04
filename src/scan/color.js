@@ -43,29 +43,66 @@ function inv3(m) {
 }
 export const mulVec = (m, v) => m.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2])
 
+// Tone curve for one channel: straight lines in log-log space through the anchor points
+// (measured, true) in linear light, kept rising. Handles the S-shaped curves phones apply.
+function toneCurve(points) {
+  let pts = points
+    .filter(([x, y]) => x > 0.002 && y > 0.002)
+    .map(([x, y, w]) => ({ x: Math.log(x), y: Math.log(y), w }))
+    .sort((a, b) => a.x - b.x)
+  // pool points that are too close to tell apart, and any that would make the curve fall
+  const pooled = []
+  for (const p of pts) {
+    pooled.push({ ...p })
+    for (;;) {
+      const n = pooled.length
+      if (n < 2) break
+      const a = pooled[n - 2], b = pooled[n - 1]
+      if (b.x - a.x > 0.05 && b.y > a.y) break
+      const w = a.w + b.w
+      pooled.splice(n - 2, 2, { x: (a.x * a.w + b.x * b.w) / w, y: (a.y * a.w + b.y * b.w) / w, w })
+    }
+  }
+  pts = pooled
+  if (pts.length < 2) {
+    const off = pts.length ? pts[0].y - pts[0].x : 0
+    return (v) => Math.exp(Math.log(Math.max(toLinear(v), 1e-5)) + off)
+  }
+  const slope = (a, b) => Math.min(2.5, Math.max(0.4, (b.y - a.y) / (b.x - a.x)))
+  const s0 = slope(pts[0], pts[1]), s1 = slope(pts[pts.length - 2], pts[pts.length - 1])
+  const lut = Float64Array.from({ length: 256 }, (_, v) => {
+    const x = Math.log(Math.max(toLinear(v), 1e-5))
+    if (x <= pts[0].x) return Math.exp(pts[0].y + s0 * (x - pts[0].x))
+    const last = pts[pts.length - 1]
+    if (x >= last.x) return Math.exp(last.y + s1 * (x - last.x))
+    let i = 1
+    while (pts[i].x < x) i++
+    const a = pts[i - 1], b = pts[i]
+    return Math.exp(a.y + ((x - a.x) / (b.x - a.x)) * (b.y - a.y))
+  })
+  return (v) => {
+    const lo = Math.max(0, Math.min(254, Math.floor(v)))
+    const t = Math.min(1, Math.max(0, v - lo))
+    return lut[lo] * (1 - t) + lut[lo + 1] * t
+  }
+}
+
+const LOCAL_SIGMA = 10 // ΔE: how far a reference colour's leftover error spreads
+const LOCAL_PRIOR = 0.03 // pulls the local fix towards zero far from any reference colour
+
 /**
  * Fit the colour correction from measured vs true colours (sRGB 0-255).
- * 1. Tone curve per channel (true = a · measured^p, in linear light) from neutrals + browns.
+ * 1. Tone curve per channel (linear light) through the grey patches and the pod background.
  * 2. 3x3 matrix from all patches + browns (browns weighted higher).
- * Returns correct(rgb) -> corrected sRGB.
+ * 3. Local fix: what is still off at each reference colour is spread to nearby colours, so a strip
+ *    colour is corrected mostly by the printed browns next to it.
+ * samples: [{ measured, truth, tone: bool, weight }]
  */
 export function fitCorrection(samples) {
-  // samples: [{ measured:[r,g,b], truth:[r,g,b], tone:bool, weight:number }]
-  const tone = [0, 1, 2].map((ch) => {
-    const pts = samples
-      .filter((s) => s.tone)
-      .map((s) => [toLinear(s.measured[ch]), toLinear(s.truth[ch])])
-      .filter(([x, y]) => x > 0.004 && y > 0.004)
-      .map(([x, y]) => [Math.log(x), Math.log(y)])
-    const n = pts.length
-    const mx = pts.reduce((s, p) => s + p[0], 0) / n
-    const my = pts.reduce((s, p) => s + p[1], 0) / n
-    const sxy = pts.reduce((s, p) => s + (p[0] - mx) * (p[1] - my), 0)
-    const sxx = pts.reduce((s, p) => s + (p[0] - mx) ** 2, 0)
-    const p = sxy / sxx
-    return { p, a: Math.exp(my - p * mx) }
-  })
-  const applyTone = (rgb) => rgb.map((c, ch) => tone[ch].a * Math.max(toLinear(c), 1e-5) ** tone[ch].p)
+  const curves = [0, 1, 2].map((ch) =>
+    toneCurve(samples.filter((s) => s.tone).map((s) => [toLinear(s.measured[ch]), toLinear(s.truth[ch]), s.weight])),
+  )
+  const applyTone = (rgb) => rgb.map((c, ch) => curves[ch](Math.min(255, Math.max(0, c))))
 
   // weighted least squares: truth ≈ Mx · toned
   const XtX = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
@@ -81,14 +118,32 @@ export function fitCorrection(samples) {
   }
   const B = inv3(XtX)
   // matrix rows = output channels
-  const Mx = [0, 1, 2].map((out) => [0, 1, 2].map((k) => B[k].reduce((s, v, j) => s + v * XtY[j][out], 0)))
+  const Mx = [0, 1, 2].map((out) => [0, 1, 2].map((k) => B[k].reduce((sum, v, j) => sum + v * XtY[j][out], 0)))
+  const clampLin = (v) => v.map((c) => Math.min(1, Math.max(0, c)))
+  const globalLab = (rgb) => linToLab(clampLin(mulVec(Mx, applyTone(rgb))))
 
-  const correctLin = (rgb) => mulVec(Mx, applyTone(rgb))
+  const anchors = samples.map((s) => {
+    const g = globalLab(s.measured)
+    const t = rgbToLab(s.truth)
+    return { g, res: [t[0] - g[0], t[1] - g[1], t[2] - g[2]], w: s.weight }
+  })
+  const correctLab = (rgb) => {
+    const g = globalLab(rgb)
+    const acc = [0, 0, 0]
+    let wsum = LOCAL_PRIOR
+    for (const a of anchors) {
+      const w = a.w * Math.exp(-((g[0] - a.g[0]) ** 2 + (g[1] - a.g[1]) ** 2 + (g[2] - a.g[2]) ** 2) / (2 * LOCAL_SIGMA ** 2))
+      wsum += w
+      for (let k = 0; k < 3; k++) acc[k] += w * a.res[k]
+    }
+    return [g[0] + acc[0] / wsum, g[1] + acc[1] / wsum, g[2] + acc[2] / wsum]
+  }
   return {
-    tone,
+    toneLut: curves.map((f) => Float64Array.from({ length: 256 }, (_, v) => f(v))),
     matrix: Mx,
-    correct: (rgb) => correctLin(rgb).map(toSrgb),
-    correctLab: (rgb) => linToLab(correctLin(rgb).map((v) => Math.min(1, Math.max(0, v)))),
+    globalLab, // tone curve + matrix only (before the local fix)
+    correctLab,
+    correct: (rgb) => labToRgb(correctLab(rgb)),
   }
 }
 

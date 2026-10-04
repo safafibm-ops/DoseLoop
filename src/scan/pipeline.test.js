@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import jpeg from 'jpeg-js'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { scanPod, scanStages, STAGES } from './pipeline.js'
+import { scanPod, scanStages, STAGES, verifyPayload } from './pipeline.js'
 import manifest from '../../public/samples/manifest.json'
 
 let cv
@@ -100,5 +100,20 @@ describe('robustness', () => {
     }
     expect(err.code).toBe('markers')
     expect(err.steps.markers.found).toBe(0)
+  })
+})
+
+describe('pod QR codes', () => {
+  const sample = (file) => scanPod(cv, load(file), { mode: 'end', today: TODAY }).steps.qr.text
+  it('reads the compact DL2 code and rejects a changed one', () => {
+    const text = sample('s02_shift1_end.jpg')
+    expect(text.startsWith('DL2:')).toBe(true)
+    expect(verifyPayload(text).valid).toBe(true)
+    expect(verifyPayload(text.replace('DL-000123', 'DL-000124')).valid).toBe(false)
+  })
+  it('still accepts pods printed with the first (DL1) code', () => {
+    const dl1 = 'DL1|DL-000123|B2610A|2026-09-20|C1|WB0LujxfIPmO4OaUichb0lryAJGR8Ke8K9JhdUpAd9h71EixRs2XnaLY4uNmfD2978rPIlsUcFLDt+ufbsx6DA=='
+    expect(verifyPayload(dl1).valid).toBe(true)
+    expect(verifyPayload(dl1.replace('C1|', 'C2|')).valid).toBe(false)
   })
 })

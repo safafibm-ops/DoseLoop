@@ -78,13 +78,15 @@ def ink_rgb(dose):
 # ---------- QR payload ----------
 
 def qr_message(serial, batch, mfg_date, cal):
-    return f"DL1|{serial}|{batch}|{mfg_date}|{cal}"
+    return f"DL2:{serial}:{batch}:{mfg_date}:{cal}"
 
 
 def qr_payload(signing_key, serial, batch, mfg_date, cal):
+    """DL2 payload: upper-case letters, digits, '-' and ':' only, so the QR uses its compact
+    alphanumeric mode (version 6, 41x41 modules instead of 49x49): bigger dots, easier to read."""
     msg = qr_message(serial, batch, mfg_date, cal)
     sig = signing_key.sign(msg.encode()).signature
-    return msg + "|" + base64.b64encode(sig).decode()
+    return msg + ":" + base64.b32encode(sig).decode().rstrip("=")
 
 
 # ---------- pod face drawing ----------
