@@ -979,6 +979,454 @@ h4 {
   margin-top: 12px;
 }
 
+/* ---------- live scan view ---------- */
+.live {
+  padding: 12px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.live.failed {
+  border-color: rgba(208, 59, 59, 0.6);
+}
+
+.lv-bar {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+.lv-seg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.lv-seg i {
+  height: 4px;
+  border-radius: 2px;
+  background: #333;
+  transition: background 0.3s ease;
+}
+
+.lv-seg em {
+  font-style: normal;
+  font-size: 0.6rem;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.lv-seg.done i {
+  background: var(--good);
+}
+
+.lv-seg.now i {
+  background: var(--accent);
+  animation: lv-blink 0.9s ease-in-out infinite;
+}
+
+.lv-seg.now em {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.lv-seg.fail i {
+  background: var(--critical);
+}
+
+.lv-seg.fail em {
+  color: var(--critical);
+}
+
+.lv-stage {
+  min-height: 200px;
+  display: grid;
+  place-items: center;
+  animation: fade 0.3s ease both;
+}
+
+.lv-wait {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.lv-frame {
+  position: relative;
+  width: min(100%, calc(340px * var(--ar, 1.333)));
+  margin: 0 auto;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+}
+
+.lv-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.lv-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.lv-box {
+  fill: rgba(250, 178, 25, 0.12);
+  stroke: #fab219;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.lv-quad {
+  fill: rgba(12, 163, 12, 0.12);
+  stroke: #31d158;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.lv-svg.anim .lv-box {
+  animation: lv-pop 0.35s ease both;
+}
+
+.lv-svg.anim .lv-quad {
+  animation: lv-draw 0.7s 0.25s ease both;
+}
+
+.lv-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #31d158;
+  box-shadow: 0 0 0 4px rgba(49, 209, 88, 0.3);
+  animation: lv-pop 0.35s ease both;
+}
+
+.lv-sample {
+  fill: rgba(57, 135, 229, 0.18);
+  stroke: #6fb0ff;
+  stroke-width: 0.25;
+}
+
+.lv-sample.key {
+  stroke: #ff6a13;
+  stroke-width: 0.4;
+  fill: rgba(255, 106, 19, 0.15);
+}
+
+.lv-sample.bad {
+  stroke: #d03b3b;
+  fill: rgba(208, 59, 59, 0.35);
+}
+
+.lv-svg.anim .lv-sample {
+  animation: lv-pop 0.3s ease both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* a light line sweeping over the photo while it is analysed */
+.lv-frame.sweep::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 30%;
+  top: -30%;
+  background: linear-gradient(180deg, transparent, rgba(255, 106, 19, 0.35), transparent);
+  border-bottom: 2px solid rgba(255, 140, 70, 0.9);
+  animation: lv-sweep 1.2s ease-in-out infinite;
+}
+
+/* the flat view turns from the photo's angle to straight */
+.lv-straighten {
+  width: 100%;
+  perspective: 900px;
+}
+
+.lv-straighten .lv-frame {
+  animation: lv-straight 0.95s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.lv-qr {
+  display: grid;
+  grid-template-columns: minmax(0, 160px) 1fr;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+}
+
+.lv-qr-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.compare .compare-top {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 0 0 var(--pos));
+  transition: clip-path 1.1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.compare .compare-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--pos);
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+  transition: left 1.1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.compare input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: ew-resize;
+  margin: 0;
+}
+
+.compare-tag {
+  position: absolute;
+  bottom: 8px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.compare-tag.left {
+  left: 8px;
+}
+
+.compare-tag.right {
+  right: 8px;
+  color: var(--accent);
+}
+
+.lv-swatches {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: center;
+}
+
+.lv-sw-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lv-sw {
+  width: 84px;
+  height: 64px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 6px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  animation: lv-pop 0.35s ease both;
+}
+
+.lv-sw small {
+  font-weight: 600;
+}
+
+.lv-arrow {
+  font-size: 1.2rem;
+  color: var(--muted);
+}
+
+.lv-net {
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.lv-dose {
+  font-size: 2.2rem;
+  font-weight: 800;
+  animation: lv-pop 0.4s 0.2s ease both;
+}
+
+.lv-dose small {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.lv-checks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.lv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: rgba(12, 163, 12, 0.16);
+  border: 1px solid rgba(12, 163, 12, 0.6);
+  animation: lv-pop 0.35s ease both;
+}
+
+.lv-checks .lv-chip:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.lv-checks .lv-chip:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.lv-checks .lv-chip:nth-child(4) {
+  animation-delay: 0.36s;
+}
+
+.lv-chip.warn {
+  background: rgba(250, 178, 25, 0.16);
+  border-color: rgba(250, 178, 25, 0.7);
+}
+
+.lv-chip.bad {
+  background: rgba(208, 59, 59, 0.18);
+  border-color: rgba(208, 59, 59, 0.7);
+}
+
+.lv-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  min-height: 1.3em;
+}
+
+.lv-caption.bad {
+  color: #ff8a80;
+}
+
+.spinner.small {
+  width: 13px;
+  height: 13px;
+  border-width: 2px;
+}
+
+/* the step list: only the current step, the rest on demand */
+.steps-drop {
+  margin-bottom: 10px;
+}
+
+.steps-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 2px 4px 8px;
+  cursor: pointer;
+}
+
+.steps-toggle .chev {
+  color: var(--accent);
+  white-space: nowrap;
+  width: auto;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 520px) {
+  .lv-seg em {
+    visibility: hidden;
+  }
+  .lv-seg.now em,
+  .lv-seg.fail em {
+    visibility: visible;
+    overflow: visible;
+  }
+}
+
+.cta.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@keyframes lv-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes lv-draw {
+  from {
+    stroke-dashoffset: 1;
+    fill-opacity: 0;
+  }
+}
+
+@keyframes lv-sweep {
+  to {
+    top: 100%;
+  }
+}
+
+@keyframes lv-blink {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes lv-straight {
+  from {
+    transform: rotate(var(--rot)) rotateX(18deg) scale(0.78);
+    opacity: 0.4;
+  }
+}
+
 .step-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1838,5 +2286,72 @@ select {
   }
   .landing h1 {
     font-size: 2.4rem;
+  }
+}
+
+/* ---------- "Get the app" corner button ---------- */
+.getapp {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 45;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.getapp-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(30, 30, 28, 0.6);
+  backdrop-filter: blur(14px);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.getapp-sheet {
+  width: min(300px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(24, 24, 22, 0.85);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  animation: rise 0.25s ease both;
+}
+
+.getapp-sheet section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.getapp-sheet section.here {
+  outline: 1px solid var(--accent);
+}
+
+.getapp-sheet .cta {
+  text-align: center;
+  text-decoration: none;
+}
+
+@media (max-width: 520px) {
+  .landing {
+    padding-top: 60px;
   }
 }

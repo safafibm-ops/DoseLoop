@@ -12,7 +12,7 @@ Full design: [docs/MASTER.md](docs/MASTER.md). Build rules: [CLAUDE.md](CLAUDE.m
 ```bash
 npm install      # once, downloads libraries
 npm run dev      # opens a local server, usually http://localhost:5173
-npm test         # runs the scan pipeline on every sample photo + the shift log rules
+npm test         # scan pipeline on every sample photo (also turned 90/180/270°), shift log rules
 npm run build    # makes the production version in dist/
 ```
 
@@ -49,6 +49,29 @@ The team history (8 workers, 5 weeks) is seeded demo data, saved offline in the 
 Logic lives in `src/data/`: `log.js` turns scans into shifts and alerts (pure functions, tested in
 `log.test.js`), `seed.js` makes the demo team, `store.jsx` saves everything offline in IndexedDB.
 Limits used: 80 ppm·hr per 8-h shift (India, 10 ppm TWA); ACGIH 8 ppm·hr shown as a stricter reference.
+
+## Live scan view
+
+When a photo is scanned, the Scan screen shows each stage on the photo itself as it happens: corner markers
+found, the pod straightened (rotation and tilt), the QR signature checked, every colour area sampled, a
+before/after slider for the colour correction, the self-test, strip minus reference, and the pod checks.
+The step list shows only the current step; **Show all** opens every step with its details.
+
+The scan engine (OpenCV.js + the pipeline) runs in a background worker (`src/scan/scanWorker.js`), so the
+screen stays smooth, a stuck scan times out cleanly, and a broken file gives a clear message. Everything is
+bundled with the app: no network is needed after the first visit (PWA) or at all (Android app).
+
+## Android app (Phase 5)
+
+The Android app wraps the same web app with Capacitor (`android/`, `capacitor.config.json`).
+
+- **Download:** the **📲 Get the app** button (top-right of the landing and login screens) links to the latest
+  APK. GitHub Actions (`.github/workflows/android.yml`) builds it on every PR and publishes it as the
+  `apk-latest` release on every push to `main`.
+- **Install:** open `DoseLoop.apk` on the phone and allow "install unknown apps" once. It is a debug build for testing.
+- **iPhone:** open the site in Safari → Share → Add to Home Screen (works offline). A native iOS build needs an
+  Apple developer account and a Mac.
+- **Build it yourself:** `npm run android`, then open `android/` in Android Studio (needs JDK 21 and the Android SDK).
 
 ## How a scan works (src/scan/pipeline.js)
 

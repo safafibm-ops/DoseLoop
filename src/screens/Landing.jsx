@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Coach from '../components/Coach.jsx'
+import GetApp from '../components/GetApp.jsx'
 import PodFace from '../components/PodFace.jsx'
 import { DemoNote, StatusChip } from '../components/ui.jsx'
 import { LIMITS, shiftStatus } from '../data/limits.js'
@@ -17,6 +18,7 @@ export function Landing() {
   const status = shiftStatus(dose)
   return (
     <main className="landing">
+      <GetApp />
       <p className="team">Team LoopHole · SIH26118 · MRPL</p>
       <h1>DoseLoop</h1>
       <p className="pitch">
@@ -64,6 +66,7 @@ export function Login() {
   }
   return (
     <main className="login">
+      <GetApp />
       <button className="link" onClick={() => go('/')}>
         ← Back
       </button>
