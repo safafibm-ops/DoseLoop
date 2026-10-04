@@ -1,0 +1,172 @@
+{
+ "note": "Simulated photos of a PRINTED badge (printer + scene + light + camera). See scripts/make_adverse.py.",
+ "photos": [
+  {
+   "file": "big_phone_daylight.jpg",
+   "camera": "phone-12MP",
+   "sheet": "big",
+   "true_dose": 25,
+   "conditions": {
+    "light": "daylight",
+    "fill": 0.55,
+    "angle": 8
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "big_phone_tungsten_tilt.jpg",
+   "camera": "phone-budget",
+   "sheet": "big",
+   "true_dose": 50,
+   "conditions": {
+    "light": "tungsten",
+    "tilt": 0.3,
+    "angle": -35,
+    "fill": 0.45
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "big_phone_shadow.jpg",
+   "camera": "phone-12MP",
+   "sheet": "big",
+   "true_dose": 10,
+   "conditions": {
+    "light": "tube",
+    "shadow": true,
+    "gradient": 0.4
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "big_phone_dim_noisy.jpg",
+   "camera": "phone-budget",
+   "sheet": "big",
+   "true_dose": 100,
+   "conditions": {
+    "light": "warm LED",
+    "exposure": 0.35,
+    "noise": 9
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "big_phone_upside_down_bent.jpg",
+   "camera": "phone-small",
+   "sheet": "big",
+   "true_dose": 0,
+   "conditions": {
+    "angle": 182,
+    "bend": 1.0
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "big_webcam_1080p.jpg",
+   "camera": "webcam-1080p",
+   "sheet": "big",
+   "true_dose": 25,
+   "conditions": {
+    "light": "tube",
+    "fill": 0.4,
+    "angle": 3
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "big_webcam_720p_far.jpg",
+   "camera": "webcam-720p",
+   "sheet": "big",
+   "true_dose": 50,
+   "conditions": {
+    "light": "warm LED",
+    "fill": 0.45,
+    "angle": -6
+   },
+   "expected": "retake"
+  },
+  {
+   "file": "big_webcam_sodium.jpg",
+   "camera": "webcam-1080p",
+   "sheet": "big",
+   "true_dose": 150,
+   "conditions": {
+    "light": "sodium",
+    "fill": 0.5,
+    "awb": 0.2
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "true_phone_sheet_close.jpg",
+   "camera": "phone-12MP",
+   "sheet": "true",
+   "true_dose": 25,
+   "conditions": {
+    "fill": 0.42,
+    "angle": 0,
+    "light": "daylight"
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "true_phone_sheet_rotated.jpg",
+   "camera": "phone-12MP",
+   "sheet": "true",
+   "true_dose": 75,
+   "conditions": {
+    "fill": 0.4,
+    "angle": 95,
+    "light": "tube"
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "true_phone_sheet_warm_blur.jpg",
+   "camera": "phone-budget",
+   "sheet": "true",
+   "true_dose": 5,
+   "conditions": {
+    "fill": 0.45,
+    "light": "warm LED",
+    "blur": 2.0
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "big_phone_motion_blur.jpg",
+   "camera": "phone-12MP",
+   "sheet": "big",
+   "true_dose": 25,
+   "conditions": {
+    "motion": 25
+   },
+   "expected": "retake"
+  },
+  {
+   "file": "big_webcam_720p_close.jpg",
+   "camera": "webcam-720p",
+   "sheet": "big",
+   "true_dose": 50,
+   "conditions": {
+    "light": "warm LED",
+    "fill": 0.55,
+    "angle": -4
+   },
+   "expected": "ok"
+  },
+  {
+   "file": "true_phone_sheet_shadow_tilt.jpg",
+   "camera": "phone-small",
+   "sheet": "true",
+   "true_dose": 100,
+   "conditions": {
+    "fill": 0.45,
+    "shadow": true,
+    "tilt": 0.2,
+    "light": "tube"
+   },
+   "expected": "ok"
+  }
+ ]
+}

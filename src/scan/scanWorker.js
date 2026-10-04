@@ -1,9 +1,10 @@
 // Runs the scan pipeline in a background thread so the screen stays smooth.
-// Messages in:  { id, imageData, mode, today }   (or { warmup: true } to load OpenCV early)
+// Messages in:  { id, imageData, mode, today }   (or { warmup: true } to load OpenCV early,
+//               or { probe: true, imageData } for a quick live-camera check -> { id, type: 'probe', result })
 // Messages out: { id, type: 'stage', stage, data } … then { id, type: 'done', result }
 //               or { id, type: 'fail', code, message } (a ScanError) or { id, type: 'crash', message }
 import cvModule from '@techstark/opencv-js'
-import { scanStages, ScanError } from './pipeline.js'
+import { probePod, scanStages, ScanError } from './pipeline.js'
 
 let ready = null
 function getCv() {
@@ -18,10 +19,11 @@ function getCv() {
 }
 
 self.onmessage = async (e) => {
-  const { id, warmup, imageData, mode, today } = e.data
+  const { id, warmup, probe, imageData, mode, today } = e.data
   try {
     const { cv } = await getCv()
     if (warmup) return self.postMessage({ id, type: 'ready' })
+    if (probe) return self.postMessage({ id, type: 'probe', result: probePod(cv, imageData) })
     const it = scanStages(cv, imageData, { mode, today: new Date(today) })
     for (;;) {
       const r = it.next()
