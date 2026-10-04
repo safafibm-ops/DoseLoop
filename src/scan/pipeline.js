@@ -7,7 +7,7 @@ import nacl from 'tweetnacl'
 import SPEC from './podSpec.json'
 import PUBLIC_KEY from './publicKey.json'
 import C1 from './calibration/C1.json'
-import { deltaE, fitCorrection, hexToRgb, interp, rgbToHex, rgbToLab } from './color.js'
+import { deltaE, fitCorrection, hexToRgb, interp, rgbToHex, rgbToLab, toLinear, toSrgb } from './color.js'
 
 const CALIBRATIONS = { C1 }
 const PPM = 20 // pixels per mm in the flat (warped) pod view
@@ -76,13 +76,36 @@ function sampleRect(flat, rect, { inset = 0.2, holes = [], holeR = 0 } = {}) {
 }
 
 // ---------- step 1: markers ----------
+// Threshold settings tried in order: the first suits most photos, the others rescue
+// small pods in a big frame, uneven light and low contrast.
+const MARKER_TRIES = [
+  { div: 25, c: 10 },
+  { div: 40, c: 8 },
+  { div: 15, c: 12 },
+  { div: 25, c: 4 },
+]
+
 function findMarkers(cv, src) {
   const gray = new cv.Mat()
-  const bin = new cv.Mat()
   cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY)
   cv.GaussianBlur(gray, gray, new cv.Size(3, 3), 0)
-  const block = (Math.round(Math.max(src.cols, src.rows) / 25) | 1) + 0
-  cv.adaptiveThreshold(gray, bin, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, block, 10)
+  let best = { markers: null, candidates: [] }
+  try {
+    for (const t of MARKER_TRIES) {
+      const r = findMarkersOnce(cv, src, gray, t)
+      if (r.markers) return { ...r, tries: MARKER_TRIES.indexOf(t) + 1 }
+      if (r.candidates.length > best.candidates.length) best = r
+    }
+  } finally {
+    gray.delete()
+  }
+  return { ...best, tries: MARKER_TRIES.length }
+}
+
+function findMarkersOnce(cv, src, gray, { div, c: C }) {
+  const bin = new cv.Mat()
+  const block = Math.round(Math.max(src.cols, src.rows) / div) | 1
+  cv.adaptiveThreshold(gray, bin, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, block, C)
   const contours = new cv.MatVector()
   const hier = new cv.Mat()
   cv.findContours(bin, contours, hier, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
@@ -113,7 +136,7 @@ function findMarkers(cv, src) {
     if (Math.hypot(mc.m10 / mc.m00 - x, mc.m01 / mc.m00 - y) > 0.12 * Math.sqrt(area)) continue
     cands.push({ area, x, y, rect: cv.boundingRect(c) })
   }
-  gray.delete(); bin.delete(); contours.delete(); hier.delete()
+  bin.delete(); contours.delete(); hier.delete()
 
   if (cands.length < 4) return { markers: null, candidates: cands }
   // choose the 4 most similar in size (largest group wins ties)
@@ -191,8 +214,57 @@ export function verifyPayload(text) {
 }
 
 // ---------- main ----------
-export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = {}) {
+const DISPLAY_SIDE = 900 // photos sent to the screen are at most this big
+
+/** Small copy of an image for the screen (keeps memory low on phones). */
+function displayImage(cv, mat) {
+  const k = Math.min(1, DISPLAY_SIDE / Math.max(mat.cols, mat.rows))
+  if (k === 1) return matToImage(cv, mat)
+  const small = new cv.Mat()
+  cv.resize(mat, small, new cv.Size(Math.round(mat.cols * k), Math.round(mat.rows * k)), 0, 0, cv.INTER_AREA)
+  const img = matToImage(cv, small)
+  small.delete()
+  return img
+}
+
+/** Whole flat pod view with the colour correction applied (lookup tables keep it fast). */
+function correctImage(img, corr) {
+  const toLin = Float64Array.from({ length: 256 }, (_, v) => toLinear(v))
+  const tone = corr.tone.map(({ a, p }) => Float64Array.from({ length: 256 }, (_, v) => a * Math.max(toLin[v], 1e-5) ** p))
+  const N = 4096
+  const toS = Uint8ClampedArray.from({ length: N + 1 }, (_, i) => Math.round(toSrgb(i / N)))
+  const M = corr.matrix
+  const out = new Uint8ClampedArray(img.data.length)
+  const d = img.data
+  for (let i = 0; i < d.length; i += 4) {
+    const r = tone[0][d[i]], g = tone[1][d[i + 1]], b = tone[2][d[i + 2]]
+    for (let ch = 0; ch < 3; ch++) {
+      const v = M[ch][0] * r + M[ch][1] * g + M[ch][2] * b
+      out[i + ch] = toS[Math.round(Math.min(1, Math.max(0, v)) * N)]
+    }
+    out[i + 3] = 255
+  }
+  return { data: out, width: img.width, height: img.height }
+}
+
+/** Every stage in order. The screen uses these names to show live progress. */
+export const STAGES = ['photo', 'markers', 'flat', 'qr', 'sampling', 'correction', 'selfTest', 'dose', 'checks']
+
+/**
+ * The pipeline as a series of stages: yields { stage, data } after each one, so a screen can show
+ * the work as it happens. Returns the final result; throws ScanError (with the steps so far) on failure.
+ */
+export function* scanStages(cv, imageData, { mode = 'start', today = new Date() } = {}) {
   const steps = {}
+  const done = (stage, data) => {
+    steps[stage] = data
+    return { stage, data }
+  }
+  if (!imageData?.width || !imageData?.height || imageData.data?.length !== imageData.width * imageData.height * 4)
+    throw new ScanError('image', 'That file is not a readable photo. Try another one.', steps)
+  if (Math.min(imageData.width, imageData.height) < 240)
+    throw new ScanError('image', 'Photo is too small. Use the full camera resolution and retake.', steps)
+
   let src = cv.matFromImageData(imageData)
   const scale = Math.min(1, MAX_SIDE / Math.max(src.cols, src.rows))
   if (scale < 1) {
@@ -201,26 +273,19 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
     src.delete()
     src = small
   }
+  const nx = (x) => x / src.cols, ny = (y) => y / src.rows
 
   try {
+    yield done('photo', { image: displayImage(cv, src) })
+
     // 1. markers -> flat view
-    const { markers, candidates } = findMarkers(cv, src)
-    const overlay = new cv.Mat()
-    src.copyTo(overlay) // a real copy, so drawing on it never touches src
-    for (const c of candidates)
-      cv.rectangle(overlay, new cv.Point(c.rect.x, c.rect.y), new cv.Point(c.rect.x + c.rect.width, c.rect.y + c.rect.height), [255, 200, 0, 255], 2)
+    const { markers, candidates, tries } = findMarkers(cv, src)
+    const boxes = candidates.map((c) => [nx(c.rect.x), ny(c.rect.y), nx(c.rect.width), ny(c.rect.height)])
     if (!markers) {
-      steps.markers = { image: matToImage(cv, overlay), found: candidates.length }
-      overlay.delete()
+      yield done('markers', { found: Math.min(candidates.length, 4), boxes, quad: null, tries })
       throw new ScanError('markers', 'Could not find the 4 corner markers. Fill the frame with the pod, hold steady, and retake.', steps)
     }
-    for (let k = 0; k < 4; k++) {
-      const a = markers[k], b = markers[(k + 1) % 4]
-      cv.line(overlay, new cv.Point(a.x, a.y), new cv.Point(b.x, b.y), [0, 230, 120, 255], 4)
-      cv.circle(overlay, new cv.Point(a.x, a.y), 14, [0, 230, 120, 255], -1)
-    }
-    steps.markers = { image: matToImage(cv, overlay), found: 4 }
-    overlay.delete()
+    yield done('markers', { found: 4, boxes, quad: markers.map((m) => [nx(m.x), ny(m.y)]), tries })
 
     // try the 4 possible orientations; the right one is where the QR sits in its corner
     const pts = markers.map((m) => [m.x, m.y])
@@ -239,15 +304,20 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
     const flatMat = warp(cv, src, imgPts, SPEC.markers.centers.map(([x, y]) => [x * PPM, y * PPM]), [W, H])
     const flat = matToImage(cv, flatMat)
     flatMat.delete()
-    steps.flat = { image: flat }
+    // how much the photo was turned and tilted (top edge of the pod vs horizontal; side ratio)
+    const rotation = (Math.atan2(imgPts[1][1] - imgPts[0][1], imgPts[1][0] - imgPts[0][0]) * 180) / Math.PI
+    const top = dist(imgPts[0], imgPts[1]), bottom = dist(imgPts[3], imgPts[2])
+    const left = dist(imgPts[0], imgPts[3]), right = dist(imgPts[1], imgPts[2])
+    const tilt = Math.max(top / bottom, bottom / top, left / right, right / left) - 1
+    yield done('flat', { image: flat, rotation, tilt, corners: imgPts.map(([x, y]) => [nx(x), ny(y)]) })
 
     // 2. QR + signature
     if (!qr.code) {
-      steps.qr = { image: qr.image, text: null }
+      yield done('qr', { image: qr.image, text: null })
       throw new ScanError('qr', 'Could not read the QR code. Move closer, avoid blur, and retake.', steps)
     }
     const pod = verifyPayload(qr.code.data)
-    steps.qr = { image: qr.image, text: qr.code.data, ...pod }
+    yield done('qr', { image: qr.image, text: qr.code.data, ...pod })
     if (!pod.valid) throw new ScanError('fake', `Pod rejected: ${pod.reason}.`, steps)
     const cal = CALIBRATIONS[pod.cal]
     if (!cal) throw new ScanError('cal', `No calibration "${pod.cal}" in this app version.`, steps)
@@ -267,7 +337,7 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
     const strip = sampleRect(flat, SPEC.strip, { inset: 0.08, holes: dotCenters(SPEC.strip), holeR: 0.85 })
     const reference = sampleRect(flat, SPEC.reference, { inset: 0.08, holes: dotCenters(SPEC.reference), holeR: 0.95 })
     const glare = [...patches, ...scale6, strip, reference].filter((p) => p.clipped > CLIP_MAX_FRACTION)
-    steps.sampling = { patches, scale: scale6, strip, reference, glare: glare.length }
+    yield done('sampling', { patches, scale: scale6, strip, reference, glare: glare.length, glareRects: glare.map((g) => g.rect), size: SPEC.size_mm })
     if (glare.length)
       throw new ScanError('glare', 'Glare or overexposure on the pod. Tilt the phone slightly or move out of direct light, then retake.', steps)
 
@@ -277,6 +347,8 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
       ...scale6.filter((s) => !s.holdout).map((s) => ({ measured: s.rgb, truth: s.truth, tone: true, weight: 3 })),
     ]
     const corr = fitCorrection(samples)
+    if (![...corr.matrix.flat(), ...corr.tone.flatMap((t) => [t.a, t.p])].every(Number.isFinite))
+      throw new ScanError('selftest', 'Colour correction could not be fitted. Retake in even light.', steps)
     const show = (p) => ({
       name: p.name,
       measured: rgbToHex(p.rgb),
@@ -286,16 +358,17 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
     })
     const fitted = [...patches, ...scale6.filter((s) => !s.holdout)].map(show)
     const held = show(scale6.find((s) => s.holdout))
-    steps.correction = {
+    yield done('correction', {
       table: [...patches, ...scale6].map(show),
       meanFitDE: fitted.reduce((s, p) => s + p.dE, 0) / fitted.length,
       holdout: held,
       tone: corr.tone,
       matrix: corr.matrix,
-    }
+      image: correctImage(flat, corr),
+    })
 
     // 5. self-test
-    steps.selfTest = { dE: held.dE, limit: SELF_TEST_MAX_DE, pass: held.dE <= SELF_TEST_MAX_DE }
+    yield done('selfTest', { dE: held.dE, limit: SELF_TEST_MAX_DE, pass: held.dE <= SELF_TEST_MAX_DE, holdout: held })
     if (!steps.selfTest.pass)
       throw new ScanError('selftest', `Colour self-test failed (${held.dE.toFixed(1)} ΔE > ${SELF_TEST_MAX_DE}). Retake in even light.`, steps)
 
@@ -307,14 +380,14 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
     const dEr = deltaE(refLab, ink0)
     const net = dEs - dEr
     const dose = Math.max(0, interp(net, cal.x, cal.y))
-    steps.dose = {
+    yield done('dose', {
       strip: { measured: rgbToHex(strip.rgb), corrected: rgbToHex(corr.correct(strip.rgb)), lab: stripLab, dE: dEs },
       reference: { measured: rgbToHex(reference.rgb), corrected: rgbToHex(corr.correct(reference.rgb)), lab: refLab, dE: dEr },
       ink0: rgbToHex(hexToRgb(SPEC.ink.colors[0])),
       net,
       dose,
       curve: cal,
-    }
+    })
 
     // 7. checks: shutter, expiry, capacity
     const sd = SPEC.shutterDots
@@ -336,14 +409,7 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
     const ageDays = Math.floor((today - new Date(pod.mfgDate)) / 86400000)
     const expired = wick >= 0.95 || ageDays > SPEC.shelf_days
     const capacity = dose / SPEC.capacity_ppmh
-    steps.checks = {
-      shutter,
-      wick,
-      ageDays,
-      expired,
-      capacity,
-      retire: capacity >= SPEC.retire_fraction,
-    }
+    yield done('checks', { shutter, wick, ageDays, expired, capacity, retire: capacity >= SPEC.retire_fraction })
     if (expired) throw new ScanError('expired', 'Pod expired: the expiry indicator has reached the line. Replace the pod.', steps)
     if (mode === 'start' && shutter !== 'open')
       throw new ScanError('shutter', 'Shutter is not open (no green dot). Slide the shutter open, then scan again.', steps)
@@ -351,6 +417,15 @@ export function scanPod(cv, imageData, { mode = 'start', today = new Date() } = 
     return { ok: true, pod, dose, mode, steps, warnings: warnings(steps, mode) }
   } finally {
     src.delete()
+  }
+}
+
+/** Runs every stage at once (tests and simple callers). */
+export function scanPod(cv, imageData, opts) {
+  const it = scanStages(cv, imageData, opts)
+  for (;;) {
+    const r = it.next()
+    if (r.done) return r.value
   }
 }
 

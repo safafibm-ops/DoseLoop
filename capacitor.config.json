@@ -1,0 +1,8 @@
+{
+  "appId": "in.loophole.doseloop",
+  "appName": "DoseLoop",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#0d0d0d"
+  }
+}

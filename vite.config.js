@@ -5,15 +5,17 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vite.dev/config/
 export default defineConfig({
   build: { chunkSizeWarningLimit: 16000 }, // OpenCV.js is one big file, loaded only on the scan screen
+  worker: { format: 'es' }, // the scan runs in a background worker (src/scan/scanWorker.js)
   plugins: [
     react(),
     // Makes the app installable and work offline (service worker + manifest).
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // registered in main.jsx (skipped inside the Android app, which is offline already)
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       workbox: {
-        // OpenCV.js is ~13 MB; cache it and the sample photos so the demo works offline
-        maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
+        // the scan worker (OpenCV.js inside) is ~16 MB; cache it and the sample photos so the demo works offline
+        maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,json}'],
       },
       manifest: {

@@ -4,26 +4,12 @@ import { DemoNote, fmtTime, SeverityChip, StatusChip } from '../components/ui.js
 import { LIMITS, SHELF_DAYS } from '../data/limits.js'
 import { openShiftFor, workerById } from '../data/log.js'
 import { TOUR, useStore } from '../data/store.jsx'
-import { loadOpenCv } from '../scan/opencv.js'
-import { scanPod } from '../scan/pipeline.js'
+import { STAGES } from '../scan/pipeline.js'
+import { runScan, warmUp } from '../scan/runScan.js'
+import { LiveView, MarkerPhoto, Picture, STAGE_MS } from './LiveScan.jsx'
 import { DoseBullet } from './Worker.jsx'
 
 const fmt = (n, d = 1) => (Number.isFinite(n) ? n.toFixed(d) : '–')
-const STEP_MS = 280
-
-// Draws an ImageData-like {data, width, height} onto a canvas.
-function Picture({ image, alt }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!image || !ref.current) return
-    const c = ref.current
-    c.width = image.width
-    c.height = image.height
-    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0)
-  }, [image])
-  return <canvas ref={ref} className="picture" aria-label={alt} />
-}
-
 const Swatch = ({ color, label }) => (
   <span className="sw" title={color}>
     <span style={{ background: color }} />
@@ -73,8 +59,20 @@ function pipelineSteps(s, error, logged) {
   const failedAt = error?.code
   if (s.markers)
     steps.push(
-      <Step key="1" n="1" title="Find the pod" ok={!!s.flat} summary={s.flat ? '4 corner markers found, photo straightened' : `Only ${s.markers.found} marker(s) found`} open={!s.flat}>
-        <Picture image={s.markers.image} alt="Photo with markers" />
+      <Step
+        key="1"
+        n="1"
+        title="Find the pod"
+        ok={s.markers.quad ? true : false}
+        summary={
+          !s.markers.quad
+            ? `Only ${s.markers.found} of 4 corner markers found`
+            : s.flat
+              ? `4 corner markers found, photo straightened (rotated ${Math.abs(Math.round(s.flat.rotation))}°)`
+              : '4 corner markers found'
+        }
+      >
+        <MarkerPhoto photo={s.photo.image} markers={s.markers} />
         {s.flat && <Picture image={s.flat.image} alt="Flat pod view" />}
       </Step>,
     )
@@ -158,6 +156,8 @@ function pipelineSteps(s, error, logged) {
   return steps
 }
 
+const ERROR_TITLE = { fake: 'Pod rejected: not genuine', expired: 'Pod expired', shutter: 'Open the shutter', image: 'Cannot use this photo' }
+
 function Outcome({ out, worker }) {
   const { result, error, outcome, alert } = out
   if (error)
@@ -165,7 +165,7 @@ function Outcome({ out, worker }) {
       <div className="outcome bad reveal">
         <div className="outcome-icon">✕</div>
         <div>
-          <b>{error.code === 'fake' ? 'Pod rejected: not genuine' : error.code === 'expired' ? 'Pod expired' : 'Retake the photo'}</b>
+          <b>{ERROR_TITLE[error.code] ?? 'Retake the photo'}</b>
           <p>{error.message}</p>
           {alert && <p className="small">Reported to the supervisor as a {alert.severity} alert.</p>}
         </div>
@@ -227,21 +227,42 @@ function Outcome({ out, worker }) {
   )
 }
 
-function fileToImageData(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight))
-      const c = document.createElement('canvas')
-      c.width = Math.round(img.naturalWidth * k)
-      c.height = Math.round(img.naturalHeight * k)
-      const ctx = c.getContext('2d')
-      ctx.drawImage(img, 0, 0, c.width, c.height)
-      resolve(ctx.getImageData(0, 0, c.width, c.height))
+// Opens a photo (file, camera shot or sample URL) as pixels, at most 1600 px on the long side.
+// createImageBitmap applies the phone's EXIF rotation; the <img> route is the fallback.
+async function fileToImageData(src) {
+  const MAX = 1600
+  const draw = (w, h, paint) => {
+    const k = Math.min(1, MAX / Math.max(w, h))
+    const c = document.createElement('canvas')
+    c.width = Math.max(1, Math.round(w * k))
+    c.height = Math.max(1, Math.round(h * k))
+    const ctx = c.getContext('2d', { willReadFrequently: true })
+    paint(ctx, c.width, c.height)
+    return ctx.getImageData(0, 0, c.width, c.height)
+  }
+  try {
+    if (typeof createImageBitmap === 'function') {
+      const blob = src instanceof Blob ? src : await (await fetch(src)).blob()
+      const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' })
+      const data = draw(bmp.width, bmp.height, (ctx, w, h) => ctx.drawImage(bmp, 0, 0, w, h))
+      bmp.close?.()
+      return data
     }
-    img.onerror = () => reject(new Error('Could not open that image.'))
-    img.src = src
-  })
+  } catch {
+    // fall through to the <img> route
+  }
+  const url = src instanceof Blob ? URL.createObjectURL(src) : src
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image()
+      im.onload = () => resolve(im)
+      im.onerror = () => reject(new Error('Could not open that image. Use a JPG or PNG photo.'))
+      im.src = url
+    })
+    return draw(img.naturalWidth, img.naturalHeight, (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h))
+  } finally {
+    if (src instanceof Blob) URL.revokeObjectURL(url)
+  }
 }
 
 export default function Scan() {
@@ -251,78 +272,89 @@ export default function Scan() {
   const [override, setOverride] = useState(null)
   const mode = override ?? (open ? 'end' : 'start')
   const [samples, setSamples] = useState([])
-  const [busy, setBusy] = useState('')
-  const [out, setOut] = useState(null)
-  const [shown, setShown] = useState(0)
-  const resultsRef = useRef(null)
+  const [scan, setScan] = useState(null) // { steps, arrived: [stage], shown: n, running, end: {result|error,…} }
+  const [allSteps, setAllSteps] = useState(false)
+  const liveRef = useRef(null)
   const outcomeRef = useRef(null)
+  const runId = useRef(0)
   const tourSample = state.tour ? TOUR[state.tour.step]?.sample : null
 
   useEffect(() => {
-    fetch('/samples/manifest.json')
+    fetch('samples/manifest.json')
       .then((r) => r.json())
       .then((m) => setSamples(m.samples))
       .catch(() => setSamples([]))
-    loadOpenCv() // start the image engine download early
+    warmUp() // start loading the image engine early
   }, [])
 
-  // reveal the steps one by one
-  const steps = out ? pipelineSteps((out.result ?? out.error)?.steps ?? {}, out.error, out.logged) : []
-  const total = steps.length
+  // show the stages one by one, at a pace people can follow
+  const shownStage = scan ? scan.arrived[scan.shown - 1] : null
   useEffect(() => {
-    if (!out || shown >= total) return
-    const id = setTimeout(() => setShown(shown + 1), STEP_MS)
-    return () => clearTimeout(id)
-  }, [out, shown, total])
+    if (!scan || scan.shown >= scan.arrived.length) return
+    const wait = scan.shown === 0 ? 0 : STAGE_MS[shownStage] ?? 700
+    const t = setTimeout(() => setScan((x) => (x ? { ...x, shown: x.shown + 1 } : x)), wait)
+    return () => clearTimeout(t)
+  }, [scan, shownStage])
+
+  // the last stage stays up a moment, then the result appears
+  const allShown = !!scan && scan.shown >= scan.arrived.length
+  const [settled, setSettled] = useState(false)
   useEffect(() => {
-    if (out) resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [out])
+    if (!scan?.end || !allShown) return
+    const t = setTimeout(() => setSettled(true), scan.arrived.length ? STAGE_MS[shownStage] ?? 700 : 0)
+    return () => clearTimeout(t)
+  }, [scan?.end, allShown, shownStage, scan?.arrived.length])
+  const finished = !!scan?.end && allShown && settled
+
+  useEffect(() => {
+    if (finished) outcomeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [finished])
 
   async function run(src, sample = null) {
-    setOut(null)
-    setShown(0)
-    setBusy('Loading the image engine (first time only)…')
-    try {
-      const { cv } = await loadOpenCv()
-      setBusy('Scanning…')
-      const data = await fileToImageData(src)
-      await new Promise((r) => setTimeout(r, 30)) // let the screen update first
-      try {
-        const result = scanPod(cv, data, { mode })
-        const outcome = logScan(result)
-        const logged = outcome.kind === 'error' ? null : `Saved to ${worker.name}’s shift log on this phone (works offline)`
-        setOut({ result, outcome, sample, logged })
-      } catch (e) {
-        if (!e.steps) console.error(e)
-        const alert = e.steps ? logRejection(e) : null
-        setOut({ error: e, alert, sample })
-      }
-    } catch (e) {
-      setOut({ error: e, sample })
+    const id = ++runId.current
+    const scanMode = mode
+    setAllSteps(false)
+    setSettled(false)
+    setScan({ steps: {}, arrived: [], shown: 0, running: true, end: null, sample })
+    requestAnimationFrame(() => liveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    const onStage = (stage, data) => {
+      if (id !== runId.current) return
+      setScan((x) => ({ ...x, steps: { ...x.steps, [stage]: data }, arrived: x.arrived.includes(stage) ? x.arrived : [...x.arrived, stage] }))
     }
+    let end
+    try {
+      const data = await fileToImageData(src)
+      const result = await runScan(data, { mode: scanMode }, onStage)
+      const outcome = logScan(result)
+      end = { result, outcome, logged: outcome.kind === 'error' ? null : `Saved to ${worker.name}’s shift log on this phone (works offline)` }
+    } catch (e) {
+      if (!e.steps && !e.crash) console.error(e)
+      const alert = e.steps && (e.code === 'fake' || e.code === 'expired') ? logRejection(e) : null
+      end = { error: e.code ? e : { code: 'image', message: e.message || 'Something went wrong. Please try again.' }, alert }
+    }
+    if (id !== runId.current) return
     setOverride(null)
-    setBusy('')
+    setScan((x) => ({ ...x, running: false, end }))
   }
 
   const onFile = (e) => {
     const f = e.target.files?.[0]
-    if (f) run(URL.createObjectURL(f))
+    if (f) run(f)
     e.target.value = ''
   }
 
-  useEffect(() => {
-    if (out && shown === total) outcomeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [out, shown, total])
-
   const ordered = tourSample ? [...samples].sort((a, b) => (b.file === tourSample) - (a.file === tourSample)) : samples
-  const allShown = shown >= steps.length
+  const visible = scan ? Object.fromEntries(scan.arrived.slice(0, scan.shown).map((k) => [k, scan.steps[k]])) : {}
+  const cards = scan ? pipelineSteps(visible, finished ? scan.end.error : null, finished ? scan.end.logged : null) : []
+  const busy = !!scan && !finished
+  const out = scan?.end ? { ...scan.end, sample: scan.sample } : null
 
   return (
     <>
       <section className="card scan-top">
         <div className="toggle" role="group" aria-label="Scan type">
           {['start', 'end'].map((m) => (
-            <button key={m} className={mode === m ? 'on' : ''} onClick={() => setOverride(m)}>
+            <button key={m} className={mode === m ? 'on' : ''} onClick={() => setOverride(m)} disabled={busy}>
               Shift {m}
             </button>
           ))}
@@ -331,33 +363,45 @@ export default function Scan() {
           {open ? `On shift since ${fmtTime(open.startAt)}. Scan to end it.` : 'Off shift. Open the shutter (green dot) and scan to start.'}
         </p>
         <div className="actions">
-          <label className="cta small-cta">
+          <label className={`cta small-cta ${busy ? 'disabled' : ''}`}>
             📷 Camera
-            <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden />
+            <input type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy} hidden />
           </label>
-          <label className="cta secondary small-cta">
+          <label className={`cta secondary small-cta ${busy ? 'disabled' : ''}`}>
             Upload photo
-            <input type="file" accept="image/*" onChange={onFile} hidden />
+            <input type="file" accept="image/*" onChange={onFile} disabled={busy} hidden />
           </label>
         </div>
       </section>
 
-      {(busy || (out && !allShown)) && <span data-coach-busy hidden />}
-      {busy && (
-        <div className="banner scanning">
-          <span className="spinner" /> {busy}
-        </div>
-      )}
+      {busy && <span data-coach-busy hidden />}
 
-      {out && (
-        <div className="results" ref={resultsRef}>
-          {steps.slice(0, shown)}
-          {allShown && (
+      {scan && (
+        <div className="results" ref={liveRef}>
+          <LiveView
+            shown={scan.arrived.slice(0, scan.shown)}
+            steps={scan.steps}
+            running={!finished}
+            failed={finished && !!scan.end.error}
+            stages={STAGES}
+          />
+
+          {cards.length > 0 && (
+            <section className={`steps-drop ${allSteps ? 'open' : ''}`}>
+              <button className="steps-toggle" onClick={() => setAllSteps(!allSteps)} aria-expanded={allSteps}>
+                <span>{allSteps ? `All ${cards.length} steps` : finished ? `Step ${cards.length} · last step` : `Step ${cards.length} · working now`}</span>
+                <span className="chev">{allSteps ? 'Hide ▴' : `Show all ${cards.length} ▾`}</span>
+              </button>
+              {allSteps ? cards : cards[cards.length - 1]}
+            </section>
+          )}
+
+          {finished && (
             <div ref={outcomeRef}>
               <Outcome out={out} worker={worker} />
             </div>
           )}
-          {allShown && out.sample && (
+          {finished && out.sample && (
             <p className="small center">
               Sample photo: {out.sample.title} ({out.sample.light}) · true simulated dose {out.sample.true_dose} ppm·hr
             </p>
@@ -372,10 +416,10 @@ export default function Scan() {
             key={s.file}
             className={`sample ${s.file === tourSample ? 'next' : ''}`}
             data-coach={`sample:${s.file}`}
-            onClick={() => run(`/samples/${s.file}`, s)}
-            disabled={!!busy}
+            onClick={() => run(`samples/${s.file}`, s)}
+            disabled={busy}
           >
-            <img src={`/samples/${s.file}`} alt="" loading="lazy" />
+            <img src={`samples/${s.file}`} alt="" loading="lazy" />
             <span>{s.title}</span>
             <span className="small muted">{s.light}</span>
           </button>
