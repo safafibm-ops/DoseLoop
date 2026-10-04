@@ -948,23 +948,8 @@ h4 {
   border-radius: 8px;
 }
 
-.sample.pulse {
+.sample.next {
   border-color: var(--accent);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.try {
-  position: absolute;
-  top: -8px;
-  right: -6px;
-  background: var(--accent);
-  color: #111;
-  font-style: normal;
-  font-weight: 800;
-  font-size: 0.72rem;
-  padding: 3px 8px;
-  border-radius: 999px;
-  z-index: 1;
 }
 
 .banner {
@@ -1630,6 +1615,156 @@ select {
   background: var(--accent);
 }
 
+/* ---------- coach pop-up: points at the next button to press ---------- */
+.coach {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.coach-ring {
+  position: fixed;
+  border: 2px solid rgba(255, 140, 70, 0.95);
+  box-shadow:
+    0 0 0 4px rgba(255, 106, 19, 0.18),
+    0 0 26px rgba(255, 106, 19, 0.55);
+  animation: coach-ring 1.6s ease-in-out infinite;
+}
+
+.coach-bubble {
+  position: fixed;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 10px 14px;
+  border-radius: 16px;
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.06)) rgba(24, 24, 22, 0.5);
+  backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 22px rgba(255, 106, 19, 0.3);
+  animation:
+    coach-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both,
+    coach-bob 2s ease-in-out 0.3s infinite;
+}
+
+.coach-bubble:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.coach-bubble:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.coach-bubble.coach-measuring {
+  visibility: hidden;
+}
+
+.coach-bubble.coach-edge {
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  max-width: calc(100vw - 24px);
+}
+
+.coach-bubble.coach-edge .coach-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.coach-chip {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #111;
+}
+
+.coach-hand {
+  flex: none;
+  font-size: 1.05rem;
+  animation: coach-tap 1s ease-in-out infinite;
+}
+
+.coach-arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transform: rotate(45deg);
+}
+
+.coach-bubble.coach-above .coach-arrow {
+  top: 100%;
+  border-top: none;
+  border-left: none;
+}
+
+.coach-bubble.coach-below .coach-arrow {
+  top: 0;
+  border-bottom: none;
+  border-right: none;
+}
+
+.coach-bubble.coach-right .coach-arrow {
+  left: 0;
+  border-top: none;
+  border-right: none;
+}
+
+.coach-bubble.coach-left .coach-arrow {
+  left: 100%;
+  border-bottom: none;
+  border-left: none;
+}
+
+@keyframes coach-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes coach-bob {
+  50% {
+    translate: 0 -4px;
+  }
+}
+
+@keyframes coach-tap {
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+@keyframes coach-ring {
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(255, 106, 19, 0.08),
+      0 0 34px rgba(255, 106, 19, 0.7);
+  }
+}
+
 /* ---------- motion ---------- */
 .reveal {
   animation: rise 0.35s ease both;
@@ -1663,16 +1798,6 @@ select {
 @keyframes spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 106, 19, 0.6);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(255, 106, 19, 0);
   }
 }
 

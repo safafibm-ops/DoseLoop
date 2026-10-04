@@ -342,6 +342,7 @@ export default function Scan() {
         </div>
       </section>
 
+      {(busy || (out && !allShown)) && <span data-coach-busy hidden />}
       {busy && (
         <div className="banner scanning">
           <span className="spinner" /> {busy}
@@ -367,8 +368,13 @@ export default function Scan() {
       <h3 className="section-title">Sample photos (no pod needed)</h3>
       <div className="samples">
         {ordered.map((s) => (
-          <button key={s.file} className={`sample ${s.file === tourSample ? 'pulse' : ''}`} onClick={() => run(`/samples/${s.file}`, s)} disabled={!!busy}>
-            {s.file === tourSample && <em className="try">Tap me</em>}
+          <button
+            key={s.file}
+            className={`sample ${s.file === tourSample ? 'next' : ''}`}
+            data-coach={`sample:${s.file}`}
+            onClick={() => run(`/samples/${s.file}`, s)}
+            disabled={!!busy}
+          >
             <img src={`/samples/${s.file}`} alt="" loading="lazy" />
             <span>{s.title}</span>
             <span className="small muted">{s.light}</span>

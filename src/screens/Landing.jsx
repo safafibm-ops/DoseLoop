@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Coach from '../components/Coach.jsx'
 import PodFace from '../components/PodFace.jsx'
 import { DemoNote, StatusChip } from '../components/ui.jsx'
 import { LIMITS, shiftStatus } from '../data/limits.js'
@@ -22,9 +23,10 @@ export function Landing() {
         A battery-free H₂S wristband that darkens with dose, and a phone scan that turns its colour into a logged ppm·hr
         reading for every worker, every shift.
       </p>
-      <button className="cta" onClick={() => go('/login')}>
+      <button className="cta" data-coach="landing:try" onClick={() => go('/login')}>
         Try demo
       </button>
+      <Coach target="landing:try" chip="Start here" text="2-minute guided demo, no login" place="right below" edge={false} />
 
       <section className="hero-pod">
         <PodFace dose={dose} className="hero-face" />
@@ -68,7 +70,7 @@ export function Login() {
       <h1>Who are you?</h1>
       <p className="muted">Demo login: no password. Pick a role.</p>
       <div className="roles">
-        <button className="role-card" onClick={() => enter('worker')}>
+        <button className="role-card" data-coach="login:worker" onClick={() => enter('worker')}>
           <span className="avatar">RK</span>
           <b>Ravi Kumar</b>
           <span>Worker · Sulphur Recovery Unit</span>
@@ -81,6 +83,7 @@ export function Login() {
           <span className="muted small">Team dashboard, alerts, reports</span>
         </button>
       </div>
+      {guided && <Coach target="login:worker" chip="Demo" text="Tap Ravi to start the guided demo" place="left below above" edge={false} />}
       <label className="check">
         <input type="checkbox" checked={guided} onChange={(e) => setGuided(e.target.checked)} /> Guide me through the 2-minute demo
         (resets demo data)

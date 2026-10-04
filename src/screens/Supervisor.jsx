@@ -314,7 +314,7 @@ export function Reports() {
         <div className="card-head">
           <h3>Exposure register</h3>
           <div className="actions">
-            <button className="cta small-cta" onClick={pdf} disabled={busy || !rows.length}>
+            <button className="cta small-cta" data-coach="export:pdf" onClick={pdf} disabled={busy || !rows.length}>
               {busy ? 'Making PDF…' : '⬇ Download PDF'}
             </button>
             <button className="cta secondary small-cta" onClick={csv} disabled={!rows.length}>

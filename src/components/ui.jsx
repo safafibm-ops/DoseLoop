@@ -1,4 +1,5 @@
 // Shared bits: icons, chips, page shells with navigation, and the demo guide.
+import Coach from './Coach.jsx'
 import { STATUS } from '../data/limits.js'
 import { SEVERITY } from '../data/log.js'
 import { go, TOUR, useStore } from '../data/store.jsx'
@@ -77,10 +78,10 @@ function Header({ title, who, sub }) {
         <span>{sub}</span>
       </div>
       <div className="role-switch" role="group" aria-label="Switch role">
-        <button className={role === 'worker' ? 'on' : ''} onClick={() => (login('worker'), go('/w/home'))}>
+        <button className={role === 'worker' ? 'on' : ''} data-coach="role:worker" onClick={() => (login('worker'), go('/w/home'))}>
           Worker
         </button>
-        <button className={role === 'supervisor' ? 'on' : ''} onClick={() => (login('supervisor'), go('/s/dashboard'))}>
+        <button className={role === 'supervisor' ? 'on' : ''} data-coach="role:supervisor" onClick={() => (login('supervisor'), go('/s/dashboard'))}>
           Supervisor
         </button>
       </div>
@@ -103,7 +104,7 @@ export function Shell({ kind, path, title, who, sub, children }) {
       </main>
       <nav className="tabbar" aria-label="Main">
         {tabs.map(([p, icon, label]) => (
-          <button key={p} className={path.startsWith(p) ? 'on' : ''} onClick={() => go(p)}>
+          <button key={p} className={path.startsWith(p) ? 'on' : ''} data-coach={`tab:${p}`} onClick={() => go(p)}>
             <span className="tab-icon">
               <Icon name={icon} />
               {icon === 'bell' && unread > 0 && <em>{unread}</em>}
@@ -117,12 +118,40 @@ export function Shell({ kind, path, title, who, sub, children }) {
   )
 }
 
-/** Floating card that walks judges through the 2-minute demo. */
+// Which button the glass pop-up points at for tour step `n`, given where the judge is now.
+function coachFor(n, path, role) {
+  const t = TOUR[n]
+  const chip = `${n + 1}/${TOUR.length}`
+  const wantRole = t.route.startsWith('/s/') ? 'supervisor' : 'worker'
+  if (role !== wantRole)
+    return wantRole === 'supervisor'
+      ? { target: 'role:supervisor', chip, text: 'Switch to Anita, the supervisor', place: 'below left' }
+      : { target: 'role:worker', chip, text: 'Switch back to Ravi, the worker', place: 'below left' }
+  if (path !== t.route) {
+    const tab = t.route.startsWith('/s/') ? 'below above' : 'above below'
+    return { target: `tab:${t.route}`, chip, text: `Open ${t.route === '/s/reports' ? 'Reports' : t.route === '/w/scan' ? 'Scan' : 'Team'}`, place: tab }
+  }
+  if (t.sample) return { target: `sample:${t.sample}`, chip, text: t.coach, place: 'below above' }
+  if (t.waitFor === 'export') return { target: 'export:pdf', chip, text: t.coach, place: 'above below right' }
+  return null
+}
+
+/** Floating card that walks judges through the 2-minute demo, plus the glass pop-up on the next button. */
 export function Guide({ path }) {
   const { state, endTour, login } = useStore()
   const step = state.tour?.step
   if (step == null) return null
   const done = step >= TOUR.length
+  const coach = done ? null : coachFor(step, path, state.session?.role)
+  return (
+    <>
+      {coach && <Coach {...coach} />}
+      <GuideCard path={path} step={step} done={done} endTour={endTour} login={login} />
+    </>
+  )
+}
+
+function GuideCard({ path, step, done, endTour, login }) {
   const t = TOUR[step]
   const act = () => {
     if (t.role) login(t.role)
