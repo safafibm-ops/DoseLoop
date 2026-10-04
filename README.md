@@ -19,7 +19,8 @@ npm run build    # makes the production version in dist/
 ## Try the demo (no pod, no login, under 2 minutes)
 
 Open the site → **Try demo** → keep *Guide me through the 2-minute demo* ticked → **Ravi Kumar (worker)**.
-A floating guide card walks through six steps; each one only needs a tap:
+A guide card on the side explains each of the six steps, and a glass pop-up points at the exact button to tap next
+(`src/components/Coach.jsx`):
 
 1. **Start the shift**: tap the pulsing sample photo; every pipeline step opens one by one.
 2. **End the shift**: the shift dose (end − start) is logged and compared with the 80 ppm·hr limit.
