@@ -187,7 +187,10 @@ export function History({ workerId: wid }) {
                 {s.offShift > OFF_SHIFT_TOLERANCE && <span className="flag">▲ +{s.offShift} ppm·hr while off shift</span>}
               </div>
               <div className="right">
-                <b>{s.dose}</b>
+                <b>
+                  {s.dose}
+                  {s.doseErr != null && <span className="pm"> ± {s.doseErr}</span>}
+                </b>
                 <StatusChip status={shiftStatus(s.dose)} />
               </div>
             </li>

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { CountUp } from '../components/Charts.jsx'
+import CameraScan from '../components/CameraScan.jsx'
 import { DemoNote, fmtTime, SeverityChip, StatusChip } from '../components/ui.jsx'
 import { LIMITS, SHELF_DAYS } from '../data/limits.js'
+import { isNativeApp } from '../native.js'
 import { openShiftFor, workerById } from '../data/log.js'
 import { TOUR, useStore } from '../data/store.jsx'
 import { STAGES } from '../scan/pipeline.js'
@@ -89,11 +91,11 @@ function pipelineSteps(s, error, logged) {
     )
   if (s.sampling)
     steps.push(
-      <Step key="3" n="3" title="Read the colours" ok={!s.sampling.glare} summary={s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : `${s.sampling.patches.length + s.sampling.scale.length + 2} areas sampled, no glare`} />,
+      <Step key="3" n="3" title="Read the colours" ok={!s.sampling.glare && !(s.sampling.uneven > s.sampling.unevenLimit) && !(s.sampling.blackSpread > s.sampling.blackLimit)} summary={s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : s.sampling.blackSpread > s.sampling.blackLimit ? `Reflection over the pod: corners differ by ${fmt(s.sampling.blackSpread)} L*` : s.sampling.uneven > s.sampling.unevenLimit ? `Colour areas are streaky (${fmt(s.sampling.uneven)} ΔE): screen stripes or a reflection` : `${s.sampling.patches.length + s.sampling.scale.length + 2 - (s.sampling.skipped?.length ?? 0)} areas sampled, light evened out${s.sampling.skipped?.length ? `, ${s.sampling.skipped.join(' & ')} over-exposed (left out)` : ''}`} />,
     )
   if (s.correction)
     steps.push(
-      <Step key="4" n="4" title="Correct for light and camera" ok summary={`Tone curve + 3×3 matrix · average error ${fmt(s.correction.meanFitDE)} ΔE`}>
+      <Step key="4" n="4" title="Correct for light and camera" ok summary={`Tone curve + 3×3 matrix (average error ${fmt(s.correction.meanGlobalDE)} ΔE), then a curve through all 6 printed brown steps (${fmt(s.correction.meanFitDE)} ΔE; the 25 ppm·hr row is left out for the self-test)`}>
         <table className="ctable">
           <thead>
             <tr>
@@ -120,11 +122,17 @@ function pipelineSteps(s, error, logged) {
     )
   if (s.selfTest)
     steps.push(
-      <Step key="5" n="5" title="Self-test" ok={s.selfTest.pass} summary={`Held-out 25 ppm·hr brown is ${fmt(s.selfTest.dE)} ΔE off (limit ${s.selfTest.limit})`} />,
+      <Step
+        key="5"
+        n="5"
+        title="Self-test"
+        ok={s.selfTest.pass}
+        summary={`Held-out 25 ppm·hr brown is ${fmt(s.selfTest.dE)} ΔE off (best under ${s.selfTest.limit}, retake over ${s.selfTest.retake})${s.selfTest.good === false ? ' · lower confidence' : ''}`}
+      />,
     )
   if (s.dose)
     steps.push(
-      <Step key="6" n="6" title="Strip minus reference → dose" ok summary={`${fmt(s.dose.strip.dE)} − ${fmt(s.dose.reference.dE)} = ${fmt(s.dose.net)} ΔE → ${fmt(s.dose.dose)} ppm·hr`}>
+      <Step key="6" n="6" title="Strip minus reference → dose" ok summary={`${fmt(s.dose.strip.dE)} − ${fmt(s.dose.reference.dE)} = ${fmt(s.dose.net)} ΔE → ${fmt(s.dose.dose)}${s.dose.doseErr != null ? ` ± ${fmt(s.dose.doseErr)}` : ''} ppm·hr`}>
         <div className="duo">
           <div>
             <b>Strip</b>
@@ -190,7 +198,8 @@ function Outcome({ out, worker }) {
           <div>
             <span className="eyebrow">Shift started · {fmtTime(outcome.shift.startAt)}</span>
             <div className="big-dose">
-              <CountUp value={result.dose} /> <small>ppm·hr on the pod</small>
+              <CountUp value={result.dose} />
+              {result.doseErr != null && <span className="pm"> ± {fmt(result.doseErr)}</span>} <small>ppm·hr on the pod</small>
             </div>
             <p className="muted">Saved for {worker.name}. Scan again at the end of the shift.</p>
           </div>
@@ -203,11 +212,13 @@ function Outcome({ out, worker }) {
               Shift ended · {fmtTime(outcome.shift.startAt)}–{fmtTime(outcome.shift.endAt)}
             </span>
             <div className="big-dose">
-              <CountUp value={outcome.dose} /> <small>ppm·hr this shift</small>
+              <CountUp value={outcome.dose} />
+              {outcome.doseErr != null && <span className="pm"> ± {fmt(outcome.doseErr)}</span>} <small>ppm·hr this shift</small>
             </div>
             <StatusChip status={outcome.status} />
             <p className="muted small">
               End {outcome.shift.endReading} − start {outcome.shift.startReading} = {outcome.dose} ppm·hr · 8-h TWA {fmt(outcome.dose / LIMITS.shiftHours)} ppm
+              {outcome.doseErr != null && ' · ± is how far the photos alone could move the reading (lab validation pending)'}
             </p>
             <DoseBullet dose={outcome.dose} />
           </div>
@@ -227,10 +238,11 @@ function Outcome({ out, worker }) {
   )
 }
 
-// Opens a photo (file, camera shot or sample URL) as pixels, at most 1600 px on the long side.
-// createImageBitmap applies the phone's EXIF rotation; the <img> route is the fallback.
+// Opens a photo (file, camera frame or sample URL) as pixels, at most 3200 px on the long side
+// (full detail for the QR code). createImageBitmap applies the phone's EXIF rotation; <img> is the fallback.
 async function fileToImageData(src) {
-  const MAX = 1600
+  if (typeof ImageData !== 'undefined' && src instanceof ImageData) return src
+  const MAX = 3200
   const draw = (w, h, paint) => {
     const k = Math.min(1, MAX / Math.max(w, h))
     const c = document.createElement('canvas')
@@ -274,6 +286,8 @@ export default function Scan() {
   const [samples, setSamples] = useState([])
   const [scan, setScan] = useState(null) // { steps, arrived: [stage], shown: n, running, end: {result|error,…} }
   const [allSteps, setAllSteps] = useState(false)
+  const [camera, setCamera] = useState(false)
+  const nativeCam = useRef(null)
   const liveRef = useRef(null)
   const outcomeRef = useRef(null)
   const runId = useRef(0)
@@ -363,18 +377,41 @@ export default function Scan() {
           {open ? `On shift since ${fmtTime(open.startAt)}. Scan to end it.` : 'Off shift. Open the shutter (green dot) and scan to start.'}
         </p>
         <div className="actions">
-          <label className={`cta small-cta ${busy ? 'disabled' : ''}`}>
+          <button className="cta small-cta" onClick={() => setCamera(true)} disabled={busy} data-coach="camera">
             📷 Camera
-            <input type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy} hidden />
-          </label>
+          </button>
+          <input ref={nativeCam} type="file" accept="image/*" capture="environment" onChange={onFile} hidden />
           <label className={`cta secondary small-cta ${busy ? 'disabled' : ''}`}>
             Upload photo
             <input type="file" accept="image/*" onChange={onFile} disabled={busy} hidden />
           </label>
         </div>
+        {!isNativeApp() && (
+          <p className="small muted print-tip">
+            No pod?{' '}
+            <a href="print/doseloop-test-badges.pdf" target="_blank" rel="noopener">
+              🖨 Print the test badges (A4 PDF)
+            </a>{' '}
+            and show them to the camera.
+          </p>
+        )}
       </section>
 
       {busy && <span data-coach-busy hidden />}
+
+      {camera && (
+        <CameraScan
+          onCapture={(frame) => {
+            setCamera(false)
+            run(frame)
+          }}
+          onClose={() => setCamera(false)}
+          onFallback={() => {
+            setCamera(false)
+            nativeCam.current?.click()
+          }}
+        />
+      )}
 
       {scan && (
         <div className="results" ref={liveRef}>

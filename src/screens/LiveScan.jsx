@@ -78,6 +78,7 @@ function Compare({ before, after, sweep }) {
 
 /** Flat pod view with every sampled area outlined. */
 function SampleMap({ flat, sampling }) {
+  flat = sampling.even ?? flat // the view with the light evened out
   const [W, H] = sampling.size
   const areas = [...sampling.patches, ...sampling.scale, { ...sampling.strip, name: 'strip' }, { ...sampling.reference, name: 'reference' }]
   const bad = new Set(sampling.glareRects.map((r) => r.join()))
@@ -154,8 +155,8 @@ function Visual({ stage, s, failed }) {
             <span className="lv-arrow">≈</span>
             <span className="lv-sw" style={{ background: h.truth }}>Printed</span>
           </div>
-          <Chip ok={s.selfTest.pass}>
-            {s.selfTest.pass ? '✓' : '✕'} {fmt(s.selfTest.dE)} ΔE off (limit {s.selfTest.limit})
+          <Chip ok={s.selfTest.good ?? s.selfTest.pass ? true : s.selfTest.pass ? 'warn' : false}>
+            {s.selfTest.pass ? (s.selfTest.good === false ? '!' : '✓') : '✕'} {fmt(s.selfTest.dE)} ΔE off (best under {s.selfTest.limit}, retake over {s.selfTest.retake})
           </Chip>
         </div>
       )
@@ -177,9 +178,12 @@ function Visual({ stage, s, failed }) {
             <span className="lv-net">{fmt(s.dose.net)} ΔE</span>
           </div>
           <div className="lv-dose">
-            {fmt(s.dose.dose)} <small>ppm·hr on the pod</small>
+            {fmt(s.dose.dose)}
+            {s.dose.doseErr != null && <span className="pm"> ± {fmt(s.dose.doseErr)}</span>} <small>ppm·hr on the pod</small>
           </div>
-          <p className="small muted">Batch curve (placeholder until lab calibration)</p>
+          <p className="small muted">
+            Batch curve (placeholder until lab calibration).{s.dose.others && ' ± from reading the dose a second way and re-reading it 6 times, each without one brown step.'}
+          </p>
         </div>
       )
     case 'checks':
@@ -207,13 +211,26 @@ function caption(stage, s) {
       return `Straightened: rotated ${Math.abs(Math.round(s.flat.rotation))}°, perspective tilt ${Math.round(s.flat.tilt * 100)}% corrected`
     }
     case 'qr':
-      return !s.qr.text ? 'QR code not readable' : s.qr.valid ? 'Genuine pod: QR signature verified' : 'QR signature does not match: copied or fake pod'
-    case 'sampling':
-      return s.sampling.glare ? `Glare on ${s.sampling.glare} area(s)` : `Sampled ${s.sampling.patches.length + s.sampling.scale.length + 2} colour areas, no glare`
+      return !s.qr.text
+        ? `QR code not readable (${s.qr.tries ?? 1} ways tried)`
+        : s.qr.valid
+          ? `Genuine pod: QR signature verified${s.qr.tries > 1 ? ` (read on try ${s.qr.tries})` : ''}`
+          : 'QR signature does not match: copied or fake pod'
+    case 'sampling': {
+      if (s.sampling.glare) return `Glare on ${s.sampling.glare} area(s)`
+      if (s.sampling.blackSpread > s.sampling.blackLimit) return `Reflection over the pod: corners differ by ${fmt(s.sampling.blackSpread)} L*`
+      if (s.sampling.uneven > s.sampling.unevenLimit) return `Colour areas are streaky (${fmt(s.sampling.uneven)} ΔE): screen stripes or a reflection`
+      const n = s.sampling.patches.length + s.sampling.scale.length + 2 - (s.sampling.skipped?.length ?? 0)
+      const light = s.sampling.lightSpread > 1.15 ? `Evened out uneven light (${Math.round((s.sampling.lightSpread - 1) * 100)}% brighter on one side), ` : ''
+      const skip = s.sampling.skipped?.length ? `, ${s.sampling.skipped.join(' & ')} over-exposed so left out` : ''
+      return `${light}${light ? 's' : 'S'}ampled ${n} colour areas${skip}`
+    }
     case 'correction':
-      return `Colour corrected for light and camera · ${fmt(s.correction.meanFitDE)} ΔE average error`
+      return s.correction.meanGlobalDE != null
+        ? `Colour corrected for light and camera · average error ${fmt(s.correction.meanGlobalDE)} ΔE, ${fmt(s.correction.meanFitDE)} after the fit through the 6 brown steps`
+        : `Colour corrected for light and camera · ${fmt(s.correction.meanFitDE)} ΔE average error`
     case 'selfTest':
-      return s.selfTest.pass ? 'Self-test passed' : 'Self-test failed'
+      return !s.selfTest.pass ? 'Self-test failed' : s.selfTest.good === false ? 'Self-test passed, lower confidence' : 'Self-test passed'
     case 'dose':
       return 'Strip minus reference → dose'
     case 'checks':

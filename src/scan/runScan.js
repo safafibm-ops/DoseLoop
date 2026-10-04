@@ -63,7 +63,8 @@ function viaWorker(w, imageData, opts, onStage) {
     }, TIMEOUT_MS)
     w.addEventListener('message', onMsg)
     w.addEventListener('error', onErr)
-    w.postMessage({ id, imageData, mode: opts.mode, today: (opts.today ?? new Date()).toISOString() })
+    // hand the pixels over instead of copying them (a 12 MP photo is ~50 MB)
+    w.postMessage({ id, imageData, mode: opts.mode, today: (opts.today ?? new Date()).toISOString() }, [imageData.data.buffer])
   })
 }
 
@@ -75,4 +76,28 @@ export async function runScan(imageData, opts, onStage = () => {}) {
   const w = getWorker()
   if (!w) throw Object.assign(new Error(NO_ENGINE), { crash: true })
   return viaWorker(w, imageData, opts, onStage)
+}
+
+/**
+ * Quick live-camera check of one video frame: { found, quad, qr, genuine, size }.
+ * Resolves null if the engine is busy or fails (the camera just tries the next frame).
+ */
+export function probe(imageData) {
+  const w = getWorker()
+  if (!w) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const id = nextId++
+    const finish = (v) => {
+      clearTimeout(timer)
+      w.removeEventListener('message', onMsg)
+      resolve(v)
+    }
+    const onMsg = (e) => {
+      if (e.data.id !== id) return
+      finish(e.data.type === 'probe' ? e.data.result : null)
+    }
+    const timer = setTimeout(() => finish(null), 15000)
+    w.addEventListener('message', onMsg)
+    w.postMessage({ id, probe: true, imageData }, [imageData.data.buffer])
+  })
 }

@@ -45,6 +45,7 @@ export function applyScan(prev, workerId, result, now = new Date()) {
   const at = new Date(now).toISOString()
   const serial = result.pod.serial
   const reading = round1(result.dose)
+  const readingErr = Number.isFinite(result.doseErr) ? round1(result.doseErr) : null // the scan's ± range
   const worker = workerById(state, workerId)
   const raised = []
   const alert = (a) => raised.push(addAlert(state, { at, workerId, podSerial: serial, ...a }))
@@ -76,7 +77,7 @@ export function applyScan(prev, workerId, result, now = new Date()) {
       alert({ type: 'off_shift', severity: 'serious', title: 'Exposure while off shift', detail: `Pod went up ${gap} ppm·hr between shifts (shutter left open or pod stored near H₂S).` })
     if (gap < -READING_DROP_TOLERANCE)
       alert({ type: 'reading_drop', severity: 'serious', title: 'Reading lower than last scan', detail: `Pod reads ${-gap} ppm·hr less than at the last scan. Possible pod swap.` })
-    const shift = { id: nextId(state, 'sh'), workerId, podSerial: serial, date: dayKey(now), shift: shiftLetter(now), startAt: at, endAt: null, startReading: reading, endReading: null, dose: null, offShift: gap, source: 'scan' }
+    const shift = { id: nextId(state, 'sh'), workerId, podSerial: serial, date: dayKey(now), shift: shiftLetter(now), startAt: at, endAt: null, startReading: reading, startErr: readingErr, endReading: null, dose: null, offShift: gap, source: 'scan' }
     state.shifts.push(shift)
     outcome = { kind: 'start', shift, gap, alerts: raised }
   } else {
@@ -85,13 +86,15 @@ export function applyScan(prev, workerId, result, now = new Date()) {
     if (dose < -READING_DROP_TOLERANCE)
       alert({ type: 'reading_drop', severity: 'serious', title: 'End reading lower than start', detail: `End ${reading} < start ${open.startReading} ppm·hr. Possible pod swap.` })
     dose = Math.max(0, dose)
-    Object.assign(open, { endAt: at, endReading: reading, dose })
+    // ± of end − start: the two scans' ranges add up like the sides of a right triangle
+    const doseErr = open.startErr != null && readingErr != null ? round1(Math.hypot(open.startErr, readingErr)) : null
+    Object.assign(open, { endAt: at, endReading: reading, endErr: readingErr, dose, doseErr })
     const status = shiftStatus(dose)
     if (status === 'over')
       alert({ type: 'over_limit', severity: 'critical', title: 'Shift dose over limit', detail: `${dose} ppm·hr this shift (limit ${LIMITS.shiftIndia}).` })
     else if (status === 'caution')
       alert({ type: 'caution', severity: 'warning', title: 'High shift dose', detail: `${dose} ppm·hr this shift (over half the ${LIMITS.shiftIndia} ppm·hr limit).` })
-    outcome = { kind: 'end', shift: open, dose, status, alerts: raised }
+    outcome = { kind: 'end', shift: open, dose, doseErr, status, alerts: raised }
   }
 
   pod.lastReading = reading

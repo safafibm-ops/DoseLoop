@@ -16,7 +16,7 @@ export default defineConfig({
       workbox: {
         // the scan worker (OpenCV.js inside) is ~16 MB; cache it and the sample photos so the demo works offline
         maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,json}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,json,pdf}'],
       },
       manifest: {
         name: 'DoseLoop – H₂S Dose Reader',
