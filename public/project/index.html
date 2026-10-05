@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DoseLoop Project Docs</title>
+<meta name="description" content="Team LoopHole, SIH26118 (MRPL): passive colorimetric H₂S dosimeter wristband and phone app. Full project documentation.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  /* Same dark palette as the DoseLoop app (src/index.css) */
+  :root {
+    --bg: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --line: #2e2e2b;
+    --fg: #ffffff; --muted: #c3c2b7; --dim: #8d8c84; --accent: #ff6a13; --warning: #fab219;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--fg); background: var(--bg); color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); line-height: 1.55; }
+  a { color: var(--accent); }
+  header.top {
+    position: sticky; top: 0; z-index: 10; background: rgba(13,13,13,0.92);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+  }
+  .bar { max-width: 1080px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 16px; align-items: center; }
+  .brand { font-weight: 700; color: var(--fg); text-decoration: none; white-space: nowrap; }
+  .brand span { color: var(--accent); }
+  nav { display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
+  nav a:hover { color: var(--fg); }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 16px 64px; }
+  .hero { padding: 56px 0 32px; }
+  .tag { display: inline-block; font-size: 12px; color: var(--accent); border: 1px solid var(--accent);
+         border-radius: 999px; padding: 2px 10px; margin-bottom: 14px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1.15; margin: 0 0 12px; }
+  .lead { color: var(--muted); font-size: 18px; max-width: 720px; margin: 0 0 24px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { background: var(--accent); color: #111; font-weight: 600; text-decoration: none;
+         padding: 10px 16px; border-radius: 10px; }
+  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .notice { margin-top: 24px; font-size: 13px; color: var(--warning); }
+  section { padding: 40px 0 8px; border-top: 1px solid var(--line); scroll-margin-top: 60px; }
+  h2 { font-size: 24px; margin: 0 0 6px; }
+  h2 small { color: var(--dim); font-weight: 400; font-size: 14px; margin-left: 6px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .ph { background: var(--surface-2); border: 1px dashed var(--line); border-radius: 12px;
+        color: var(--dim); font-size: 13px; display: grid; place-items: center; text-align: center;
+        min-height: 180px; padding: 16px; }
+  .ph.tall { min-height: 360px; }
+  .todo { color: var(--dim); font-style: italic; }
+  ol.steps { margin: 0; padding-left: 20px; color: var(--muted); }
+  ol.steps li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; }
+  .table-wrap { overflow-x: auto; }
+  footer { max-width: 1080px; margin: 0 auto; padding: 24px 16px 40px; color: var(--dim); font-size: 13px;
+           border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <a class="brand" href="#top">Dose<span>Loop</span> Docs</a>
+    <nav>
+      <a href="#overview">Overview</a>
+      <a href="#problem">Problem</a>
+      <a href="#solution">Solution</a>
+      <a href="#hardware">Hardware &amp; 3D</a>
+      <a href="#chemistry">Chemistry</a>
+      <a href="#app">App</a>
+      <a href="#validation">Validation</a>
+      <a href="#cost">Cost</a>
+      <a href="#team">Team</a>
+      <a href="#links">Links</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero" id="overview">
+    <div class="tag">SIH 2026 · PS SIH26118 · MRPL</div>
+    <h1>DoseLoop: a passive H₂S dosimeter wristband read by a phone camera</h1>
+    <p class="lead">One reusable wristband and one disposable colour-changing pod per worker. Scan the pod at the start and end of each shift and the app logs that worker's H₂S dose in ppm·hr.</p>
+    <div class="btns">
+      <a class="btn" href="/">Open the web app</a>
+      <a class="btn ghost" href="https://github.com/safafibm-ops/DoseLoop">GitHub</a>
+      <a class="btn ghost" href="https://github.com/safafibm-ops/DoseLoop/releases/download/apk-latest/DoseLoop.apk">Android APK</a>
+    </div>
+    <p class="notice">Documentation site template. Sections marked "Coming soon" will be filled in later. All doses, costs and accuracy figures are demo data, lab validation pending.</p>
+  </div>
+
+  <section id="problem">
+    <h2>1. Problem</h2>
+    <p class="sub">Why H₂S exposure tracking matters in refineries.</p>
+    <div class="grid">
+      <div class="card"><h3>H₂S hazard</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>Limits (DGMS / OISD)</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>Gaps in current solutions</h3><p class="todo">Coming soon.</p></div>
+    </div>
+  </section>
+
+  <section id="solution">
+    <h2>2. Our solution</h2>
+    <p class="sub">One product: reusable wristband plus a 30-day clip-in pod, scanned at every shift start and end.</p>
+    <div class="grid">
+      <div class="ph">Product hero image<br>(placeholder)</div>
+      <div class="card">
+        <h3>How a shift works</h3>
+        <ol class="steps">
+          <li>Open the shutter and scan the pod at shift start.</li>
+          <li>Work the shift; the ink darkens with H₂S dose.</li>
+          <li>Scan again at shift end. Dose = end scan minus start scan.</li>
+          <li>Close the shutter off-shift; any change is flagged.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section id="hardware">
+    <h2>3. Hardware and 3D model <small>Fusion 360 v5</small></h2>
+    <p class="sub">Wristband, pod, shutter plate and cradle.</p>
+    <div class="ph tall" style="margin-bottom:14px">Interactive 3D model viewer<br>(placeholder for the Fusion 360 export)</div>
+    <div class="grid">
+      <div class="ph">CAD render: shutter open</div>
+      <div class="ph">CAD render: shutter closed</div>
+      <div class="ph">CAD render: exploded view</div>
+    </div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card"><h3>Reusable wristband</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>Disposable sensor pod</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>Safety and standards</h3><p class="todo">Coming soon.</p></div>
+    </div>
+  </section>
+
+  <section id="chemistry">
+    <h2>4. Chemistry</h2>
+    <p class="sub">Copper acetate ink: pale blue-green, olive, brown, then black as dose rises.</p>
+    <div class="grid">
+      <div class="ph">Colour scale photo / chart</div>
+      <div class="card"><h3>Sensing lane and reference cell</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>Expiry indicator</h3><p class="todo">Coming soon.</p></div>
+    </div>
+  </section>
+
+  <section id="app">
+    <h2>5. App and scan pipeline</h2>
+    <p class="sub">Marker alignment, QR check, colour correction, Lab ΔE, dose in ppm·hr.</p>
+    <div class="grid">
+      <div class="ph">Screenshot: scan page</div>
+      <div class="ph">Screenshot: scan result</div>
+      <div class="ph">Screenshot: worker dashboard</div>
+      <div class="ph">Screenshot: supervisor dashboard</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Pipeline steps</h3>
+      <p class="todo">Coming soon: diagram of the 8 scan steps.</p>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>6. Lab validation plan</h2>
+    <p class="sub">Test setup, target accuracy and results.</p>
+    <div class="grid">
+      <div class="card"><h3>Setup</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>Tests</h3><p class="todo">Coming soon.</p></div>
+      <div class="ph">Results chart (after lab tests)</div>
+    </div>
+  </section>
+
+  <section id="cost">
+    <h2>7. Cost</h2>
+    <p class="sub">Estimates only, supplier quotes pending.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Item</th><th>Estimate</th></tr>
+        <tr><td>Wristband (one per worker)</td><td class="todo">TBD</td></tr>
+        <tr><td>Sensor pod (per ~30 days)</td><td class="todo">TBD</td></tr>
+        <tr><td>Per worker per month</td><td class="todo">TBD</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="team">
+    <h2>8. Team LoopHole</h2>
+    <p class="sub">Members and roles.</p>
+    <div class="grid">
+      <div class="card"><h3>Member 1</h3><p>Role</p></div>
+      <div class="card"><h3>Member 2</h3><p>Role</p></div>
+      <div class="card"><h3>Member 3</h3><p>Role</p></div>
+      <div class="card"><h3>Member 4</h3><p>Role</p></div>
+      <div class="card"><h3>Member 5</h3><p>Role</p></div>
+      <div class="card"><h3>Member 6</h3><p>Role</p></div>
+    </div>
+  </section>
+
+  <section id="links">
+    <h2>9. Links and references</h2>
+    <div class="grid">
+      <div class="card"><h3>Software web app</h3><p><a href="/">Open DoseLoop</a></p></div>
+      <div class="card"><h3>GitHub repository</h3><p><a href="https://github.com/safafibm-ops/DoseLoop">safafibm-ops/DoseLoop</a></p></div>
+      <div class="card"><h3>Android APK</h3><p><a href="https://github.com/safafibm-ops/DoseLoop/releases/download/apk-latest/DoseLoop.apk">Download latest APK</a></p></div>
+      <div class="card"><h3>Team video</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>Master solution document</h3><p class="todo">Coming soon.</p></div>
+      <div class="card"><h3>References</h3><p class="todo">Coming soon.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer>Team LoopHole · Smart India Hackathon 2026 · Demo data, lab validation pending.</footer>
+</body>
+</html>
