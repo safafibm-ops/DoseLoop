@@ -17,6 +17,8 @@ export default defineConfig({
         // the scan worker (OpenCV.js inside) is ~16 MB; cache it and the sample photos so the demo works offline
         maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,json,pdf}'],
+        // the project docs site at /project/ is its own page, not the app
+        navigateFallbackDenylist: [/^\/project/],
       },
       manifest: {
         name: 'DoseLoop – H₂S Dose Reader',
