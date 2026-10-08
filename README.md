@@ -70,7 +70,8 @@ green when the QR reads, and the photo is then taken by itself (`src/components/
 camera is blocked or missing, the app says how to allow it and offers a normal photo instead.
 
 No pod? Print **`public/print/doseloop-test-badges.pdf`** (link on the Scan screen) on plain A4 at 100%:
-page 1 has a shift-start and a shift-end badge, page 2 a copied pod and a closed shutter. They are the pod
+one shift per page. Page 1 is a Safe shift (0 → 20 ppm·hr), page 2 the next shift on the same pod, over the
+limit (20 → 120 ppm·hr), and page 3 a copied pod the app must reject. Scan them in order. They are the pod
 face at 3× size, so even a laptop webcam can read them. Printed colours are never exactly the lab colours, so
 a printed badge reads close to, not exactly, its label (demo data, lab validation pending).
 
@@ -149,7 +150,8 @@ Layout and true colours of the pod face live in `src/scan/podSpec.json`, shared 
 ```bash
 python3 -m pip install numpy pillow qrcode pynacl scikit-learn opencv-python-headless
 python3 scripts/fit_curve.py   # fits the placeholder dose curve -> src/scan/calibration/C1.json
-python3 scripts/make_pods.py   # pod faces (print/), A4 sheets, test badges (public/print/), sample photos
+python3 scripts/make_pods.py   # pod faces (print/), A4 sheets, sample photos
+python3 scripts/make_badges.py # printable test badges (public/print/), works without the signing key
 python3 scripts/make_adverse.py # printed-badge test photos for npm test (test/adverse/)
 python3 scripts/make_adverse.py --gap ../gap 12  # laptop vs phone pairs, incl. photos of a laptop screen
 ```
