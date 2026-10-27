@@ -158,10 +158,58 @@
     .panel, .revealed { transition: none; }
   }
 
-  /* architecture */
-  .arch { border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #0f1418; }
-  .arch-scroll { overflow-x: auto; }
-  .arch img { min-width: 900px; width: 100%; }
+  /* architecture tree: one trunk (the data path) growing down as you scroll, branches alternate sides */
+  .tree { position: relative; display: grid; gap: 34px; padding-block: 8px 20px; --tx: 50%; }
+  .trunk { position: absolute; top: 40px; bottom: 30px; left: var(--tx); width: 4px; margin-left: -2px; border-radius: 4px; background: var(--line); }
+  .trunk i { position: absolute; inset: 0; border-radius: 4px; transform-origin: 50% 0; transform: scaleY(var(--grow, 1));
+    background: linear-gradient(180deg, var(--s0), var(--s1) 25%, var(--s2) 45%, var(--s3) 65%, var(--s4) 82%, var(--orange)); box-shadow: 0 0 18px color-mix(in srgb, var(--orange) 30%, transparent); }
+  .root { position: relative; justify-self: center; text-align: center; display: grid; gap: 4px; padding: 16px 26px; border-radius: 999px; z-index: 1;
+    background: linear-gradient(var(--panel-2), var(--panel)) padding-box, linear-gradient(150deg, var(--orange), #5a3a24 50%, var(--line)) border-box; border: 1px solid transparent; }
+  .root strong { font: 800 22px/1.1 var(--display); font-stretch: 125%; }
+  .root span { color: var(--muted); font-size: 14px; }
+  .flow { position: relative; z-index: 1; justify-self: center; font-size: 12.5px; font-weight: 600; color: var(--ground);
+    background: var(--c, var(--s2)); padding: 4px 12px; border-radius: 999px; }
+  .branch { position: relative; display: grid; grid-template-columns: 1fr 1fr; column-gap: 64px; align-items: start; }
+  .branch > .bwrap { position: relative; display: grid; gap: 12px; }
+  .branch.l > .bwrap { grid-column: 1; }
+  .branch.r > .bwrap { grid-column: 2; }
+  /* the twig from the trunk to the branch head */
+  .bhead { position: relative; display: grid; gap: 2px; padding: 14px 18px; border-radius: 14px;
+    background: linear-gradient(170deg, #232a28, var(--panel)) padding-box, linear-gradient(150deg, var(--c), var(--line) 60%) border-box; border: 1px solid transparent; }
+  .bhead::before { content: ""; position: absolute; top: 26px; height: 3px; width: 32px; background: var(--c); }
+  .bhead::after { content: ""; position: absolute; top: 20px; width: 14px; height: 14px; border-radius: 50%; background: var(--ground); border: 3px solid var(--c); }
+  .branch.l .bhead::before { right: -32px; } .branch.l .bhead::after { right: -42px; }
+  .branch.r .bhead::before { left: -32px; } .branch.r .bhead::after { left: -42px; }
+  .bhead small { font: 700 12.5px var(--body); color: var(--c); letter-spacing: .03em; }
+  .bhead h3 { font-size: 21px; }
+  .bhead p { color: var(--muted); font-size: 14px; }
+  /* leaves hang off a sub-branch line */
+  .leaves { list-style: none; margin: 0; padding: 0 0 0 22px; display: grid; gap: 10px; position: relative; }
+  .leaves::before { content: ""; position: absolute; left: 8px; top: -12px; bottom: 22px; width: 2px; background: color-mix(in srgb, var(--c) 55%, var(--line)); }
+  .leaf { position: relative; padding: 11px 14px; border-radius: 11px; background: var(--panel); border: 1px solid var(--line); display: grid; gap: 3px; }
+  .leaf::before { content: ""; position: absolute; left: -14px; top: 20px; width: 14px; height: 2px; background: color-mix(in srgb, var(--c) 55%, var(--line)); }
+  .leaf b { font-weight: 600; font-size: 15px; }
+  .leaf span { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+  .leaf .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+  .leaf .chips em { font-style: normal; font-size: 12px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+  .st { justify-self: start; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+  .st.built { color: #8fe0a6; background: rgba(12,163,12,.14); }
+  .st.plan { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+  .leaf.step { grid-template-columns: auto 1fr; column-gap: 10px; align-items: start; }
+  .leaf.step i { grid-row: span 2; font: 800 13px/22px var(--display); font-style: normal; width: 22px; height: 22px; border-radius: 50%; text-align: center;
+    color: var(--ground); background: var(--c); }
+  .leaves.chain .leaf:not(:last-child)::after { content: "↓"; position: absolute; left: 50%; bottom: -14px; font-size: 12px; color: var(--dim); }
+  /* grow-in on scroll */
+  .tree.anim .bhead, .tree.anim .leaf, .tree.anim .flow { opacity: 0; transform: translateY(18px) scale(.98); }
+  .tree.anim .on { opacity: 1; transform: none; transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+  @media (max-width: 860px) {
+    .tree { --tx: 14px; }
+    .root, .flow { justify-self: start; margin-left: 30px; }
+    .branch { grid-template-columns: 1fr; padding-left: 46px; }
+    .branch.l > .bwrap, .branch.r > .bwrap { grid-column: 1; }
+    .branch.l .bhead::before, .branch.r .bhead::before { left: -32px; right: auto; width: 32px; }
+    .branch.l .bhead::after, .branch.r .bhead::after { left: -42px; right: auto; }
+  }
 
   /* impact */
   .who { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
@@ -405,9 +453,88 @@
       <h2>From a card on the wrist to an audit report</h2>
       <p class="lede">The card does the sensing with no power. A phone or the gate dock takes the photo, the scan engine runs on the device, and the app keeps the shift log offline. Every card's colours and calibration come from the factory in its signed QR.</p>
     </div>
-    <div class="arch"><div class="arch-scroll">
-      <img src="img/architecture.png" alt="DoseLoop architecture: wristband, cradle, frame and sensor card; capture by smartphone or gate dock; on-device scan engine with 7 steps; app with shift logic, offline log, worker app, supervisor dashboard and reports; factory calibration and build pipeline" width="3400" height="1728" loading="lazy">
-    </div></div>
+    <div class="tree" id="tree">
+      <div class="trunk" aria-hidden="true"><i id="trunk-fill"></i></div>
+      <div class="root"><strong>DoseLoop</strong><span>Passive H₂S dose card → photo → on-device scan → shift log and reports</span></div>
+
+      <div class="branch r" style="--c:#c9b37a">
+        <div class="bwrap">
+          <div class="bhead"><small>Feeds every card</small><h3>Factory and calibration</h3><p>Each card leaves the factory knowing its own colours and dose curve.</p></div>
+          <ul class="leaves chain">
+            <li class="leaf"><b>Print roll</b><span>Copper-acetate ink, 6-step scale and colour modules printed in one pass</span></li>
+            <li class="leaf"><b>Inline spectrophotometer</b><span>Measures the real Lab colour of each roll; cards over 2 ΔE from the roll average are rejected</span></li>
+            <li class="leaf"><b>Lab chamber</b><span>Known H₂S doses → scikit-learn curve fit → calibration per batch</span><em class="st plan">pending lab</em></li>
+            <li class="leaf"><b>Signed QR</b><span>Serial, batch, date, measured colours and curve, signed with Ed25519</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="branch l" style="--c:var(--s1)">
+        <div class="bwrap">
+          <div class="bhead"><small>1 · On the wrist</small><h3>No battery, no electronics</h3><p>Reusable band holds a one-time card that darkens with dose.</p></div>
+          <ul class="leaves">
+            <li class="leaf"><b>Wristband</b><span>About 12 months. FKM straps, 316L buckle and spring bars, orange breakaway link</span></li>
+            <li class="leaf"><b>Cradle + frame</b><span>Antistatic PC/PA12. Clear UV-blocking shutter (green = open, red = closed), 4 corner markers</span></li>
+            <li class="leaf"><b>Sensor card · one-time</b><span>28.6 × 40 × 2.7 mm laminate, swapped by the dock</span>
+              <div class="chips"><em>Copper-acetate strip 9 × 22 mm</em><em>21 holes, 2 mm air gap</em><em>Reference cell + carbon/ZnO</em><em>6-step scale</em><em>Signed colour QR</em><em>Heat dot ~45 °C</em><em>Tear stripe</em></div></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="flow" style="--c:var(--s1)">card colour</div>
+
+      <div class="branch r" style="--c:#6fa8e8">
+        <div class="bwrap">
+          <div class="bhead"><small>2 · Capture</small><h3>Start and end of every shift</h3><p>Any phone, or the dock at the gate.</p></div>
+          <ul class="leaves">
+            <li class="leaf"><b>Any smartphone</b><span>Live camera with auto-capture once markers and QR lock, or upload a photo. Web app or Android APK</span><em class="st built">built</em></li>
+            <li class="leaf"><b>Gate dock</b><span>Lid-interlocked light box, 5000 K LEDs, Pi Camera Module 3 on a Pi Zero 2 W. Stepper pusher and foil peeler swap cards from a 25-card magazine</span><em class="st plan">v6 design</em></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="flow" style="--c:#6fa8e8">photo</div>
+
+      <div class="branch l" style="--c:#4fd1b5">
+        <div class="bwrap">
+          <div class="bhead"><small>3 · Scan engine</small><h3>Runs on the phone, offline</h3><p>OpenCV.js in a background worker. Nothing leaves the device.</p></div>
+          <ul class="leaves">
+            <li class="leaf step"><i>1</i><b>Find and flatten</b><span>Geometry-checked corner markers, perspective warp</span></li>
+            <li class="leaf step"><i>2</i><b>Verify</b><span>Read the QR, check its Ed25519 signature. Fakes are rejected</span></li>
+            <li class="leaf step"><i>3</i><b>Sample</b><span>Light evened in 2 mm cells, median of each patch. Glare, reflection or moiré means retake</span></li>
+            <li class="leaf step"><i>4</i><b>Colour-correct</b><span>Tone curve and 3 × 3 matrix from the printed browns and colour patches</span></li>
+            <li class="leaf step"><i>5</i><b>Self-test</b><span>A held-out brown must land within about 3 ΔE, or the app asks for a retake</span></li>
+            <li class="leaf step"><i>6</i><b>Dose</b><span>Strip ΔE minus reference ΔE, batch curve → ppm·hr with a ± range</span></li>
+            <li class="leaf step"><i>7</i><b>Card checks</b><span>Shutter dot, heat dot, card age and % capacity used</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="flow" style="--c:#4fd1b5">ppm·hr ± range</div>
+
+      <div class="branch r" style="--c:#b39cf0">
+        <div class="bwrap">
+          <div class="bhead"><small>4 · App and records</small><h3>Offline-first shift log</h3><p>React + Vite web app, the same code as the Android app.</p></div>
+          <ul class="leaves">
+            <li class="leaf"><b>Shift logic</b><span>Dose = end − start. If a start scan differs from the last end scan, off-shift exposure is flagged. Limits 80 ppm·hr (India) and 8 ppm·hr (ACGIH)</span></li>
+            <li class="leaf"><b>On-device log</b><span>Worker, shift, time, dose ± range, card serial in IndexedDB. Works with no network</span></li>
+            <li class="leaf"><b>Worker app</b><span>Scan, shift history, card status, alerts</span></li>
+            <li class="leaf"><b>Supervisor dashboard</b><span>Team heat map, alerts, cards due for change</span></li>
+            <li class="leaf"><b>Reports</b><span>Exposure register as CSV or PDF in a DGMS/OISD-style format</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="branch l" style="--c:var(--dim)">
+        <div class="bwrap">
+          <div class="bhead"><small>Build and delivery</small><h3>One codebase, two apps</h3><p>Every change is tested and shipped automatically.</p></div>
+          <ul class="leaves chain">
+            <li class="leaf"><b>GitHub Actions</b><span>Build and scan-pipeline tests on every change</span></li>
+            <li class="leaf"><b>Vercel web app + Android APK</b><span>HTTPS for the camera, installable and offline; the APK link always serves the latest build</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
     <p class="small muted" style="margin-top:12px">Built today: capture by phone, scan engine, app and records. The dock, spectro-measured QR and thin-plate-spline correction are the v6 design.</p>
   </section>
 
@@ -776,6 +903,30 @@
       }
     });
   }
+
+  // Architecture tree: the trunk grows with scroll, twigs and leaves appear as they come into view.
+  (function tree() {
+    const t = document.getElementById('tree'), fill = document.getElementById('trunk-fill'); if (!t) return;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still || !('IntersectionObserver' in window)) return;
+    const box = t.getBoundingClientRect();
+    if (box.top < innerHeight * 0.6) return;            // already on screen at load: show it complete
+    t.classList.add('anim');
+    const grow = () => {
+      const r = t.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, (innerHeight * 0.75 - r.top) / r.height));
+      fill.style.setProperty('--grow', p.toFixed(3));
+    };
+    addEventListener('scroll', grow, { passive: true }); grow();
+    const io = new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); }
+    }), { rootMargin: '0px 0px -12% 0px' });
+    t.querySelectorAll('.bhead, .leaf, .flow').forEach((n) => {
+      const sibs = n.parentElement ? [...n.parentElement.children] : [];
+      n.style.transitionDelay = `${Math.min(sibs.indexOf(n), 6) * 60}ms`;
+      io.observe(n);
+    });
+  })();
 
   // Switch the 3D model between the wristband, the exploded card and the dock.
   const mv = document.getElementById('mv');
