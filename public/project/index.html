@@ -2,214 +2,947 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DoseLoop Project Docs</title>
-<meta name="description" content="Team LoopHole, SIH26118 (MRPL): passive colorimetric H₂S dosimeter wristband and phone app. Full project documentation.">
+<meta name="description" content="Team LoopHole, SIH26118 (MRPL): a reusable wristband with a one-time colour-changing card that logs each worker's H₂S dose in ppm·hr. Design v6.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,500;112,700;125,800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<script type="module" src="vendor/model-viewer-3.5.0.min.js"></script>
 <style>
-  /* Same dark palette as the DoseLoop app (src/index.css) */
+  /* Layout: left-aligned engineering dossier. Hero = live 3D band beside the pitch, the card's own
+     6-step dose scale as the page's one signature band; sections below are quiet spec sheets. */
   :root {
-    --bg: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --line: #2e2e2b;
-    --fg: #ffffff; --muted: #c3c2b7; --dim: #8d8c84; --accent: #ff6a13; --warning: #fab219;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    color: var(--fg); background: var(--bg); color-scheme: dark;
+    /* colour: graphite with a faint green bias (the cradle's matte black), safety orange from the band */
+    --ground: #151918;
+    --panel: #1d2221;
+    --panel-2: #252b29;
+    --line: #333b38;
+    --ink: #eef0eb;
+    --muted: #a7b0aa;
+    --dim: #79837d;
+    --orange: #ff6a13;
+    --amber: #f2b234;
+    /* the card's printed dose scale (placeholder colours until lab calibration) */
+    --s0: #afded0; --s1: #afc8aa; --s2: #a7a271; --s3: #987d51; --s4: #73533a; --s5: #241e1a;
+    /* type */
+    --display: 'Archivo', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+    --body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --measure: 66ch;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); line-height: 1.55; }
-  a { color: var(--accent); }
-  header.top {
-    position: sticky; top: 0; z-index: 10; background: rgba(13,13,13,0.92);
-    backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; color: var(--ink);
+    /* faint glows: safety orange top-left, card blue-green mid-right */
+    background:
+      radial-gradient(900px 520px at 8% -4%, color-mix(in srgb, var(--orange) 13%, transparent), transparent 70%),
+      radial-gradient(800px 600px at 96% 38%, color-mix(in srgb, var(--s0) 7%, transparent), transparent 70%),
+      linear-gradient(180deg, #171c1b 0%, var(--ground) 40%, #121615 100%);
+    background-color: var(--ground);
+    font: 400 17px/1.6 var(--body); -webkit-font-smoothing: antialiased;
   }
-  .bar { max-width: 1080px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 16px; align-items: center; }
-  .brand { font-weight: 700; color: var(--fg); text-decoration: none; white-space: nowrap; }
-  .brand span { color: var(--accent); }
-  nav { display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; }
-  nav a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
-  nav a:hover { color: var(--fg); }
-  main { max-width: 1080px; margin: 0 auto; padding: 0 16px 64px; }
-  .hero { padding: 56px 0 32px; }
-  .tag { display: inline-block; font-size: 12px; color: var(--accent); border: 1px solid var(--accent);
-         border-radius: 999px; padding: 2px 10px; margin-bottom: 14px; }
-  h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1.15; margin: 0 0 12px; }
-  .lead { color: var(--muted); font-size: 18px; max-width: 720px; margin: 0 0 24px; }
-  .btns { display: flex; flex-wrap: wrap; gap: 10px; }
-  .btn { background: var(--accent); color: #111; font-weight: 600; text-decoration: none;
-         padding: 10px 16px; border-radius: 10px; }
-  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
-  .notice { margin-top: 24px; font-size: 13px; color: var(--warning); }
-  section { padding: 40px 0 8px; border-top: 1px solid var(--line); scroll-margin-top: 60px; }
-  h2 { font-size: 24px; margin: 0 0 6px; }
-  h2 small { color: var(--dim); font-weight: 400; font-size: 14px; margin-left: 6px; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
-  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
-  .card h3 { margin: 0 0 6px; font-size: 16px; }
-  .card p { margin: 0; color: var(--muted); font-size: 14px; }
-  .ph { background: var(--surface-2); border: 1px dashed var(--line); border-radius: 12px;
-        color: var(--dim); font-size: 13px; display: grid; place-items: center; text-align: center;
-        min-height: 180px; padding: 16px; }
-  .ph.tall { min-height: 360px; }
-  .todo { color: var(--dim); font-style: italic; }
-  ol.steps { margin: 0; padding-left: 20px; color: var(--muted); }
-  ol.steps li { margin: 4px 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-  th { color: var(--dim); font-weight: 500; }
-  .table-wrap { overflow-x: auto; }
-  footer { max-width: 1080px; margin: 0 auto; padding: 24px 16px 40px; color: var(--dim); font-size: 13px;
-           border-top: 1px solid var(--line); }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+    z-index: 30; background: var(--ground);
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--ink); text-decoration-color: var(--orange); text-underline-offset: 3px; }
+  a:hover { color: var(--orange); }
+  :focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; border-radius: 4px; }
+  .wrap {
+    max-width: 1180px; margin: 0 auto;
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
+  }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+  h1 { font-weight: 800; font-stretch: 125%; font-size: clamp(34px, 4.6vw, 58px); line-height: 1.02; letter-spacing: -0.015em; }
+  h2 { font-weight: 800; font-stretch: 125%; font-size: clamp(26px, 3.4vw, 38px); line-height: 1.1; }
+  h3 { font-weight: 700; font-stretch: 112%; font-size: 19px; line-height: 1.3; }
+  p { margin: 0; }
+  .lede { color: var(--muted); font-size: 19px; max-width: var(--measure); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- top bar ---------- */
+  .top {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+  }
+  .top .wrap { display: flex; align-items: center; gap: 20px; height: 56px; }
+  .brand { font: 800 19px/1 var(--display); font-stretch: 125%; text-decoration: none; white-space: nowrap; }
+  .brand b { color: var(--orange); font-weight: 800; }
+  .top nav { display: flex; gap: 18px; overflow-x: auto; scrollbar-width: none; margin-left: auto; }
+  .top nav::-webkit-scrollbar { display: none; }
+  .top nav a { color: var(--muted); text-decoration: none; font-size: 14.5px; white-space: nowrap; padding: 6px 0; }
+  .top nav a:hover { color: var(--ink); }
+
+  /* ---------- hero ---------- */
+  .hero { padding-block: 44px 0; }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 40px; align-items: center; }
+  .hero-copy { display: grid; gap: 22px; min-width: 0; }
+  .kicker { color: var(--orange); font-weight: 600; font-size: 15px; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 10px;
+    font-weight: 600; font-size: 15.5px; text-decoration: none; border: 1px solid var(--line); color: var(--ink);
+  }
+  .btn.primary { background: var(--orange); border-color: var(--orange); color: #1a0d05; }
+  .btn.primary:hover { color: #1a0d05; filter: brightness(1.08); }
+  .btn:not(.primary):hover { border-color: var(--muted); color: var(--ink); }
+  .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); }
+  .facts div { padding: 14px 14px 0 0; display: grid; gap: 2px; }
+  .facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+  .facts strong { font: 800 26px/1.1 var(--display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+  .facts span { color: var(--muted); font-size: 13.5px; line-height: 1.35; }
+
+  /* the viewer is drawn as a watch face: brushed-steel case edge, dial with a dose bezel */
+  .viewer {
+    position: relative; min-width: 0; border-radius: 34px; overflow: hidden; isolation: isolate;
+    background:
+      radial-gradient(120% 90% at 50% 38%, #2c3532 0%, var(--panel) 52%, #101413 100%) padding-box,
+      linear-gradient(150deg, #6b7471 0%, #2b3230 28%, #1a1f1e 55%, #59625f 100%) border-box;
+    border: 2px solid transparent;
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.8), inset 0 0 0 6px rgba(0,0,0,.25), inset 0 2px 0 rgba(255,255,255,.04);
+  }
+  .bezel { position: absolute; inset: 0; margin: auto; width: min(92%, 520px); aspect-ratio: 1; max-width: 100%;
+    z-index: -1; pointer-events: none; opacity: .9; animation: turn 240s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  model-viewer { width: 100%; height: clamp(360px, 52vw, 560px); --poster-color: transparent; background: transparent; }
+  .views { position: absolute; left: 12px; top: 12px; display: flex; gap: 4px; padding: 4px; border-radius: 10px;
+    background: color-mix(in srgb, var(--ground) 80%, transparent); border: 1px solid var(--line); }
+  .views button {
+    font: 600 13.5px var(--body); color: var(--muted); background: none; border: 0; border-radius: 7px;
+    padding: 7px 11px; cursor: pointer;
+  }
+  .views button[aria-pressed="true"] { background: var(--panel-2); color: var(--ink); }
+  .viewer-note { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; justify-content: space-between;
+    gap: 12px; color: var(--dim); font-size: 12.5px; pointer-events: none; }
+  .ar-btn { pointer-events: auto; }
+
+  /* the signature: the card's 6-step dose scale */
+  .scale { margin-top: 44px; display: grid; grid-template-columns: repeat(6, 1fr); }
+  .scale div { padding: 26px 10px 10px; display: grid; gap: 1px; color: #10120f; }
+  .scale div:nth-child(n+4) { color: #f3efe8; }
+  .scale b { font: 800 22px/1 var(--display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+  .scale small { font-size: 12px; opacity: .85; }
+  .scale-cap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; padding-top: 10px; color: var(--dim); font-size: 13.5px; }
+
+  /* ---------- sections ---------- */
+  section { padding-block: 84px 0; scroll-margin-top: 64px; }
+  .head { display: grid; gap: 14px; margin-bottom: 34px; max-width: 820px; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: start; }
+  /* panels get a machined edge: lighter top-left, like a watch case catching light */
+  .panel {
+    border-radius: 16px; padding: 22px; min-width: 0; border: 1px solid transparent;
+    background:
+      linear-gradient(170deg, #222827 0%, var(--panel) 60%) padding-box,
+      linear-gradient(150deg, #4a5350 0%, var(--line) 35%, #262c2a 70%, #3a4340 100%) border-box;
+    transition: transform .3s ease, box-shadow .3s ease;
+  }
+  a.panel:hover, .ver:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -22px rgba(0,0,0,.9); }
+
+  /* scroll progress, filled with the card's dose colours */
+  .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; transform-origin: 0 50%; transform: scaleX(0);
+    background: linear-gradient(90deg, var(--s0), var(--s1), var(--s2), var(--s3), var(--s4), var(--orange)); }
+
+  /* scroll reveal: content is visible by default; script only hides what is still below the fold */
+  .will-reveal { opacity: 0; transform: translateY(26px); }
+  .revealed { opacity: 1; transform: none; transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+  @media (prefers-reduced-motion: reduce) {
+    .will-reveal { opacity: 1; transform: none; }
+    .bezel { animation: none; }
+    .panel, .revealed { transition: none; }
+  }
+
+  /* architecture tree: one trunk (the data path) growing down as you scroll, branches pair up left and right */
+  .tree { position: relative; display: grid; gap: 34px; padding-block: 8px 20px; --tx: 50%; }
+  .trunk { position: absolute; top: 40px; bottom: 30px; left: var(--tx); width: 4px; margin-left: -2px; border-radius: 4px; background: var(--line); }
+  .trunk i { position: absolute; inset: 0; border-radius: 4px; transform-origin: 50% 0; transform: scaleY(var(--grow, 1));
+    background: linear-gradient(180deg, var(--s0), var(--s1) 25%, var(--s2) 45%, var(--s3) 65%, var(--s4) 82%, var(--orange)); box-shadow: 0 0 18px color-mix(in srgb, var(--orange) 30%, transparent); }
+  .root { position: relative; justify-self: center; text-align: center; display: grid; gap: 4px; padding: 16px 26px; border-radius: 999px; z-index: 1;
+    background: linear-gradient(var(--panel-2), var(--panel)) padding-box, linear-gradient(150deg, var(--orange), #5a3a24 50%, var(--line)) border-box; border: 1px solid transparent; }
+  .root strong { font: 800 22px/1.1 var(--display); font-stretch: 125%; }
+  .root span { color: var(--muted); font-size: 14px; }
+  .flow { position: relative; z-index: 1; justify-self: center; font-size: 12.5px; font-weight: 600; color: var(--ground);
+    background: var(--c, var(--s2)); padding: 4px 12px; border-radius: 999px; }
+  .row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 64px; align-items: start; }
+  .branch { position: relative; min-width: 0; }
+  .branch > .bwrap { position: relative; display: grid; gap: 12px; }
+  /* the twig from the trunk to the branch head */
+  .bhead { position: relative; display: grid; gap: 2px; padding: 14px 18px; border-radius: 14px;
+    background: linear-gradient(170deg, #232a28, var(--panel)) padding-box, linear-gradient(150deg, var(--c), var(--line) 60%) border-box; border: 1px solid transparent; }
+  .bhead::before { content: ""; position: absolute; top: 26px; height: 3px; width: 32px; background: var(--c); }
+  .bhead::after { content: ""; position: absolute; top: 20px; width: 14px; height: 14px; border-radius: 50%; background: var(--ground); border: 3px solid var(--c); }
+  .branch.l .bhead::before { right: -32px; } .branch.l .bhead::after { right: -42px; }
+  .branch.r .bhead::before { left: -32px; } .branch.r .bhead::after { left: -42px; }
+  .bhead small { font: 700 12.5px var(--body); color: var(--c); letter-spacing: .03em; }
+  .bhead h3 { font-size: 21px; }
+  .bhead p { color: var(--muted); font-size: 14px; }
+  /* leaves hang off a sub-branch line */
+  .leaves { list-style: none; margin: 0; padding: 0 0 0 22px; display: grid; gap: 10px; position: relative; }
+  .leaves::before { content: ""; position: absolute; left: 8px; top: -12px; bottom: 22px; width: 2px; background: color-mix(in srgb, var(--c) 55%, var(--line)); }
+  .leaf { position: relative; padding: 11px 14px; border-radius: 11px; background: var(--panel); border: 1px solid var(--line); display: grid; gap: 3px; }
+  .leaf::before { content: ""; position: absolute; left: -14px; top: 20px; width: 14px; height: 2px; background: color-mix(in srgb, var(--c) 55%, var(--line)); }
+  .leaf b { font-weight: 600; font-size: 15px; }
+  .leaf span { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+  .leaf .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+  .leaf .chips em { font-style: normal; font-size: 12px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+  .st { justify-self: start; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+  .st.built { color: #8fe0a6; background: rgba(12,163,12,.14); }
+  .st.plan { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+  .leaf.step { grid-template-columns: auto 1fr; column-gap: 10px; align-items: start; }
+  .leaf.step i { grid-row: span 2; font: 800 13px/22px var(--display); font-style: normal; width: 22px; height: 22px; border-radius: 50%; text-align: center;
+    color: var(--ground); background: var(--c); }
+  .leaves.chain .leaf:not(:last-child)::after { content: "↓"; position: absolute; left: 50%; bottom: -14px; font-size: 12px; color: var(--dim); }
+  /* grow-in on scroll */
+  .tree.anim .bhead, .tree.anim .leaf, .tree.anim .flow { opacity: 0; transform: translateY(18px) scale(.98); }
+  .tree.anim .on { opacity: 1; transform: none; transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+  @media (max-width: 860px) {
+    .tree { --tx: 14px; }
+    .root, .flow { justify-self: start; margin-left: 30px; }
+    .row { grid-template-columns: minmax(0, 1fr); row-gap: 34px; padding-left: 46px; }
+    .branch.l .bhead::before, .branch.r .bhead::before { left: -32px; right: auto; width: 32px; }
+    .branch.l .bhead::after, .branch.r .bhead::after { left: -42px; right: auto; }
+  }
+
+  /* impact */
+  .who { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .who .panel { display: grid; gap: 6px; align-content: start; }
+  .who .panel b { font: 700 13px var(--body); color: var(--orange); letter-spacing: .02em; }
+
+  /* design history: a timeline like a watch's date ring */
+  .timeline { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; position: relative; }
+  .ver { display: grid; grid-template-rows: auto 1fr; overflow: hidden; padding: 0; }
+  .ver img { width: 100%; height: 240px; object-fit: cover; border-bottom: 1px solid var(--line); background: #2d3542; }
+  .ver .body { padding: 18px 20px 20px; display: grid; gap: 10px; align-content: start; }
+  .ver .vno { display: flex; align-items: center; gap: 10px; }
+  .ver .vno span {
+    font: 800 15px/1 var(--display); font-stretch: 112%; color: #1a0d05; background: var(--orange);
+    border-radius: 999px; padding: 6px 11px; font-variant-numeric: tabular-nums;
+  }
+  .ver .vno small { color: var(--dim); font-size: 13px; }
+  .ver ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14.5px; color: var(--muted); }
+  .ver .why { font-size: 14px; color: var(--ink); border-top: 1px dashed var(--line); padding-top: 10px; }
+  .ver .why em { color: var(--amber); font-style: normal; font-weight: 600; }
+  .ver.now { border-width: 1px; background:
+      linear-gradient(170deg, #2a2620 0%, var(--panel) 60%) padding-box,
+      linear-gradient(150deg, var(--orange) 0%, #5a3a24 40%, var(--line) 100%) border-box; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14.5px; }
+  .tag { display: inline-block; font-size: 12.5px; font-weight: 600; color: var(--amber);
+    border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent); border-radius: 999px; padding: 2px 9px; }
+
+  /* limits */
+  .limits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .limit { display: grid; gap: 8px; align-content: start; }
+  .limit strong { font: 800 34px/1 var(--display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+  .limit strong small { font-size: 16px; font-weight: 700; color: var(--muted); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 620px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  thead th { color: var(--muted); font-weight: 500; background: var(--panel); }
+  td.us, th.us { background: color-mix(in srgb, var(--orange) 9%, transparent); }
+  td { font-variant-numeric: tabular-nums; }
+
+  /* shift steps (a real sequence) */
+  .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; counter-reset: s; list-style: none; padding: 0; margin: 0; }
+  .steps li { counter-increment: s; display: grid; gap: 8px; align-content: start; padding-top: 16px; border-top: 3px solid var(--line); }
+  .steps li::before { content: counter(s); font: 800 15px/1 var(--display); color: var(--orange); }
+  .steps li:first-child { border-top-color: var(--s0); }
+  .steps li:nth-child(2) { border-top-color: var(--s2); }
+  .steps li:nth-child(3) { border-top-color: var(--s4); }
+  .steps li:nth-child(4) { border-top-color: var(--line); }
+  .formula { margin-top: 28px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
+  .formula b { font: 800 22px/1.2 var(--display); font-stretch: 112%; }
+
+  /* nesting + layer stack */
+  .nest { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 26px; }
+  .nest span { padding: 8px 12px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); font-weight: 600; font-size: 15px; }
+  .nest span.once { border-color: var(--orange); color: var(--orange); }
+  .nest i { color: var(--dim); font-style: normal; }
+  .stack { display: grid; gap: 4px; }
+  .layer { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 14px; align-items: center; }
+  .layer .bar { height: 18px; border-radius: 3px; border: 1px solid rgba(255,255,255,.08); }
+  .layer p { font-size: 14.5px; line-height: 1.4; }
+  .layer p span { color: var(--muted); }
+  .figs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+  figure img { border-radius: 12px; border: 1px solid var(--line); background: #2d3542; width: 100%; height: 100%; object-fit: cover; }
+  figcaption { color: var(--dim); font-size: 13.5px; }
+  .spec { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 18px; font-size: 15px; }
+  .spec dt { color: var(--muted); }
+  .spec dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+  /* lists */
+  .ticks { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .ticks li { padding-left: 18px; position: relative; }
+  .ticks li::before { content: ""; position: absolute; left: 0; top: .62em; width: 8px; height: 8px; border-radius: 2px; background: var(--s3); }
+  ol.seq { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+  ol.seq li::marker { color: var(--orange); font-weight: 700; }
+
+  .layers4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 0.6fr)) minmax(0, 1.6fr); gap: 14px; align-items: end; }
+  .shots img { background: var(--panel); }
+
+  .quote { font: 700 clamp(21px, 2.4vw, 27px)/1.3 var(--display); font-stretch: 112%; max-width: 30ch; }
+
+
+  .links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .links a.panel { text-decoration: none; display: grid; gap: 4px; }
+  .links a.panel:hover { border-color: var(--orange); color: var(--ink); }
+  .links a.panel span { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+
+  .refs { columns: 2 360px; column-gap: 40px; font-size: 14px; color: var(--muted); }
+  .refs h3 { font-size: 15px; color: var(--ink); margin: 18px 0 8px; break-after: avoid; }
+  .refs h3:first-child { margin-top: 0; }
+  .refs p { margin-bottom: 8px; break-inside: avoid; }
+  .refs a { color: var(--muted); }
+
+  footer { margin-top: 90px; border-top: 1px solid var(--line); padding-block: 26px 40px; color: var(--dim); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 24px; }
+
+  @media (max-width: 960px) {
+    .hero-grid, .two { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 26px; }
+    .shots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .shots figure:last-child { grid-column: 1 / -1; }
+    .links, .who, .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 620px) {
+    body { font-size: 16px; }
+    .top nav { display: none; }
+    .facts { grid-template-columns: 1fr; }
+    .facts div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); padding-bottom: 12px; }
+    .limits, .layers4, .figs, .links, .who, .timeline { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr; }
+    .scale div { padding: 18px 5px 8px; }
+    .scale b { font-size: 16px; }
+    .scale small { font-size: 10.5px; }
+    .layer { grid-template-columns: 70px minmax(0, 1fr); }
+    section { padding-top: 64px; }
+  }
 </style>
 </head>
 <body>
+
 <header class="top">
-  <div class="bar">
-    <a class="brand" href="#top">Dose<span>Loop</span> Docs</a>
-    <nav>
-      <a href="#overview">Overview</a>
+  <div class="wrap">
+    <a class="brand" href="#top">Dose<b>Loop</b></a>
+    <nav aria-label="Sections">
       <a href="#problem">Problem</a>
-      <a href="#solution">Solution</a>
-      <a href="#hardware">Hardware &amp; 3D</a>
-      <a href="#chemistry">Chemistry</a>
+      <a href="#shift">How it works</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#hardware">Hardware</a>
+      <a href="#dock">Dock</a>
       <a href="#app">App</a>
-      <a href="#validation">Validation</a>
+      <a href="#accuracy">Accuracy</a>
       <a href="#cost">Cost</a>
-      <a href="#team">Team</a>
+      <a href="#validation">Validation</a>
+      <a href="#history">v1 → v6</a>
       <a href="#links">Links</a>
     </nav>
   </div>
+  <div class="progress" id="progress" aria-hidden="true"></div>
 </header>
 
 <main id="top">
-  <div class="hero" id="overview">
-    <div class="tag">SIH 2026 · PS SIH26118 · MRPL</div>
-    <h1>DoseLoop: a passive H₂S dosimeter wristband read by a phone camera</h1>
-    <p class="lead">One reusable wristband and one disposable colour-changing pod per worker. Scan the pod at the start and end of each shift and the app logs that worker's H₂S dose in ppm·hr.</p>
-    <div class="btns">
-      <a class="btn" href="/">Open the web app</a>
-      <a class="btn ghost" href="https://github.com/safafibm-ops/DoseLoop">GitHub</a>
-      <a class="btn ghost" href="https://github.com/safafibm-ops/DoseLoop/releases/download/apk-latest/DoseLoop.apk">Android APK</a>
-    </div>
-    <p class="notice">Documentation site template. Sections marked "Coming soon" will be filled in later. All doses, costs and accuracy figures are demo data, lab validation pending.</p>
-  </div>
+  <div class="hero wrap">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <p class="kicker">Team LoopHole · SIH 2026 · Problem statement SIH26118 (MRPL)</p>
+        <h1>Every worker's H₂S dose, read from a card on the wrist.</h1>
+        <p class="lede">DoseLoop is a reusable wristband that holds a one-time colour-changing sensor card. The worker scans it with a phone at the start and end of each shift, and the app logs that shift's hydrogen sulphide dose in ppm·hr. No battery, nothing to charge.</p>
+        <div class="ctas">
+          <a class="btn primary" href="/">Try the live app</a>
+          <a class="btn" href="https://github.com/safafibm-ops/DoseLoop/releases/download/apk-latest/DoseLoop.apk">Android APK</a>
+          <a class="btn" href="https://github.com/safafibm-ops/DoseLoop">Source code</a>
+        </div>
+        <div class="facts">
+          <div><strong class="num">₹15–35</strong><span>per worker per month (estimate)</span></div>
+          <div><strong class="num">0</strong><span>batteries or electronics on the worker</span></div>
+          <div><strong class="num">28.6×40</strong><span>mm one-time sensor card, 2.7 mm thin</span></div>
+        </div>
+      </div>
 
-  <section id="problem">
-    <h2>1. Problem</h2>
-    <p class="sub">Why H₂S exposure tracking matters in refineries.</p>
-    <div class="grid">
-      <div class="card"><h3>H₂S hazard</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>Limits (DGMS / OISD)</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>Gaps in current solutions</h3><p class="todo">Coming soon.</p></div>
-    </div>
-  </section>
-
-  <section id="solution">
-    <h2>2. Our solution</h2>
-    <p class="sub">One product: reusable wristband plus a 30-day clip-in pod, scanned at every shift start and end.</p>
-    <div class="grid">
-      <div class="ph">Product hero image<br>(placeholder)</div>
-      <div class="card">
-        <h3>How a shift works</h3>
-        <ol class="steps">
-          <li>Open the shutter and scan the pod at shift start.</li>
-          <li>Work the shift; the ink darkens with H₂S dose.</li>
-          <li>Scan again at shift end. Dose = end scan minus start scan.</li>
-          <li>Close the shutter off-shift; any change is flagged.</li>
-        </ol>
+      <div class="viewer">
+        <svg class="bezel" id="bezel" viewBox="0 0 400 400" aria-hidden="true"></svg>
+        <model-viewer id="mv" src="models/band.glb" alt="3D model of the DoseLoop v6 wristband with its sensor card"
+          camera-controls touch-action="pan-y" auto-rotate auto-rotate-delay="1500" rotation-per-second="18deg"
+          camera-orbit="25deg 55deg 0.2m" camera-target="0m 0m 0m" shadow-intensity="0.8" exposure="1.05" environment-image="neutral"
+          interaction-prompt="none" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed">
+          <button slot="ar-button" class="btn ar-btn" style="position:absolute;right:12px;top:12px;background:var(--panel);font-size:13.5px;padding:8px 12px">View on your wrist (AR)</button>
+        </model-viewer>
+        <div class="views" role="group" aria-label="Model view">
+          <button type="button" data-src="models/band.glb" data-orbit="25deg 55deg 0.2m" aria-pressed="true">Wristband</button>
+          <button type="button" data-src="models/exploded.glb" data-orbit="35deg 60deg 115%" aria-pressed="false">Card layers</button>
+          <button type="button" data-src="models/dock.glb" data-orbit="-30deg 62deg 115%" aria-pressed="false">Dock</button>
+        </div>
+        <div class="viewer-note"><span id="mv-cap">v6 wristband, shutter open. Drag to turn, pinch to zoom.</span><span style="white-space:nowrap">Fusion 360 v6</span></div>
       </div>
     </div>
-  </section>
 
-  <section id="hardware">
-    <h2>3. Hardware and 3D model <small>Fusion 360 v5</small></h2>
-    <p class="sub">Wristband, pod, shutter plate and cradle.</p>
-    <div class="ph tall" style="margin-bottom:14px">Interactive 3D model viewer<br>(placeholder for the Fusion 360 export)</div>
-    <div class="grid">
-      <div class="ph">CAD render: shutter open</div>
-      <div class="ph">CAD render: shutter closed</div>
-      <div class="ph">CAD render: exploded view</div>
+    <div class="scale" aria-label="Printed dose scale on the card">
+      <div style="background:var(--s0)"><b>0</b><small>fresh</small></div>
+      <div style="background:var(--s1)"><b>10</b><small>ppm·hr</small></div>
+      <div style="background:var(--s2)"><b>25</b><small>ppm·hr</small></div>
+      <div style="background:var(--s3)"><b>50</b><small>ppm·hr</small></div>
+      <div style="background:var(--s4)"><b>100</b><small>ppm·hr</small></div>
+      <div style="background:var(--s5)"><b>200</b><small>ppm·hr</small></div>
     </div>
-    <div class="grid" style="margin-top:14px">
-      <div class="card"><h3>Reusable wristband</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>Disposable sensor pod</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>Safety and standards</h3><p class="todo">Coming soon.</p></div>
+    <div class="scale-cap">
+      <span>The 6-step scale printed on every card. Copper acetate ink goes pale blue-green, olive, brown, then black as the dose builds up.</span>
+      <span>Placeholder colours until lab calibration.</span>
     </div>
-  </section>
+  </div>
 
-  <section id="chemistry">
-    <h2>4. Chemistry</h2>
-    <p class="sub">Copper acetate ink: pale blue-green, olive, brown, then black as dose rises.</p>
-    <div class="grid">
-      <div class="ph">Colour scale photo / chart</div>
-      <div class="card"><h3>Sensing lane and reference cell</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>Expiry indicator</h3><p class="todo">Coming soon.</p></div>
+  <!-- ===================== PROBLEM ===================== -->
+  <section id="problem" class="wrap">
+    <div class="head">
+      <h2>Exposure limits are a dose. Most workers never get one measured.</h2>
+      <p class="lede">H₂S limits are written as an average over a shift, so what matters is the total a worker takes in, per shift and over months. A fixed gas alarm or a spot reading can't tell you that. Personal electronic monitors can, but at a cost that rules them out for every contract worker.</p>
     </div>
-  </section>
-
-  <section id="app">
-    <h2>5. App and scan pipeline</h2>
-    <p class="sub">Marker alignment, QR check, colour correction, Lab ΔE, dose in ppm·hr.</p>
-    <div class="grid">
-      <div class="ph">Screenshot: scan page</div>
-      <div class="ph">Screenshot: scan result</div>
-      <div class="ph">Screenshot: worker dashboard</div>
-      <div class="ph">Screenshot: supervisor dashboard</div>
+    <div class="limits">
+      <div class="panel limit"><strong class="num">80 <small>ppm·hr</small></strong><p class="small muted">India, Factories Act: 10 ppm averaged over an 8-hour shift.</p></div>
+      <div class="panel limit"><strong class="num">8 <small>ppm·hr</small></strong><p class="small muted">ACGIH (stricter, international): 1 ppm averaged over 8 hours. DoseLoop flags against both.</p></div>
+      <div class="panel limit"><strong class="num">0.1–1 <small>ppm</small></strong><p class="small muted">Typical shift average in field studies, even when short peaks pass 10 ppm. A spot reading misses the total.</p></div>
     </div>
-    <div class="card" style="margin-top:14px">
-      <h3>Pipeline steps</h3>
-      <p class="todo">Coming soon: diagram of the 8 scan steps.</p>
-    </div>
-  </section>
-
-  <section id="validation">
-    <h2>6. Lab validation plan</h2>
-    <p class="sub">Test setup, target accuracy and results.</p>
-    <div class="grid">
-      <div class="card"><h3>Setup</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>Tests</h3><p class="todo">Coming soon.</p></div>
-      <div class="ph">Results chart (after lab tests)</div>
-    </div>
-  </section>
-
-  <section id="cost">
-    <h2>7. Cost</h2>
-    <p class="sub">Estimates only, supplier quotes pending.</p>
+    <div style="height:28px"></div>
     <div class="table-wrap">
       <table>
-        <tr><th>Item</th><th>Estimate</th></tr>
-        <tr><td>Wristband (one per worker)</td><td class="todo">TBD</td></tr>
-        <tr><td>Sensor pod (per ~30 days)</td><td class="todo">TBD</td></tr>
-        <tr><td>Per worker per month</td><td class="todo">TBD</td></tr>
+        <thead><tr><th></th><th>Electronic personal monitor</th><th>Single-use H₂S badge</th><th class="us">DoseLoop</th></tr></thead>
+        <tbody>
+          <tr><td>Cost</td><td>₹15,000–40,000 each, plus calibration gas</td><td>about ₹6,700 per worker per month</td><td class="us">₹15–35 per worker per month (estimate)</td></tr>
+          <tr><td>Power</td><td>Daily charging, bump tests</td><td>None</td><td class="us">None on the worker</td></tr>
+          <tr><td>Per-shift dose record</td><td>Needs software and downloads</td><td>Read by eye, once</td><td class="us">Logged every shift, with a ± range</td></tr>
+          <tr><td>Fake or reused sensor</td><td>n/a</td><td>Hard to tell</td><td class="us">Signed QR + tear stripe, rejected by the app</td></tr>
+          <tr><td>Instant alarm</td><td>Yes</td><td>No</td><td class="us">No. Works alongside existing gas alarms</td></tr>
+        </tbody>
       </table>
     </div>
   </section>
 
-  <section id="team">
-    <h2>8. Team LoopHole</h2>
-    <p class="sub">Members and roles.</p>
-    <div class="grid">
-      <div class="card"><h3>Member 1</h3><p>Role</p></div>
-      <div class="card"><h3>Member 2</h3><p>Role</p></div>
-      <div class="card"><h3>Member 3</h3><p>Role</p></div>
-      <div class="card"><h3>Member 4</h3><p>Role</p></div>
-      <div class="card"><h3>Member 5</h3><p>Role</p></div>
-      <div class="card"><h3>Member 6</h3><p>Role</p></div>
+  <!-- ===================== HOW A SHIFT WORKS ===================== -->
+  <section id="shift" class="wrap">
+    <div class="head">
+      <h2>Two scans a shift. The difference is the dose.</h2>
+      <p class="lede">The card keeps darkening as long as it is worn, so one card covers many shifts. A sliding shutter closes the air holes off-shift, and the app checks that nothing changed in between.</p>
+    </div>
+    <ol class="steps">
+      <li><h3>Open and scan</h3><p class="muted small">At shift start, slide the shutter open (green dot shows) and scan the card with any phone.</p></li>
+      <li><h3>Work the shift</h3><p class="muted small">H₂S diffuses through 1.0 mm holes and a 2 mm air gap into the ink, which darkens with the dose.</p></li>
+      <li><h3>Scan again</h3><p class="muted small">At shift end, scan again. The app shows the shift dose with a range, for example 6.5 ± 0.8 ppm·hr, Safe.</p></li>
+      <li><h3>Close the shutter</h3><p class="muted small">Slide it closed (red dot). If the next start scan differs from this end scan, the app flags off-shift exposure.</p></li>
+    </ol>
+    <div class="formula">
+      <b>Shift dose = end scan − start scan</b>
+      <span class="muted">The card is replaced by the dock when it reaches 80% of its range, when its reference cell drifts, if the heat dot has tripped, or if it was tampered with.</span>
     </div>
   </section>
 
-  <section id="links">
-    <h2>9. Links and references</h2>
-    <div class="grid">
-      <div class="card"><h3>Software web app</h3><p><a href="/">Open DoseLoop</a></p></div>
-      <div class="card"><h3>GitHub repository</h3><p><a href="https://github.com/safafibm-ops/DoseLoop">safafibm-ops/DoseLoop</a></p></div>
-      <div class="card"><h3>Android APK</h3><p><a href="https://github.com/safafibm-ops/DoseLoop/releases/download/apk-latest/DoseLoop.apk">Download latest APK</a></p></div>
-      <div class="card"><h3>Team video</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>Master solution document</h3><p class="todo">Coming soon.</p></div>
-      <div class="card"><h3>References</h3><p class="todo">Coming soon.</p></div>
+  <!-- ===================== ARCHITECTURE ===================== -->
+  <section id="architecture" class="wrap">
+    <div class="head">
+      <h2>From a card on the wrist to an audit report</h2>
+      <p class="lede">The card does the sensing with no power. A phone or the gate dock takes the photo, the scan engine runs on the device, and the app keeps the shift log offline. Every card's colours and calibration come from the factory in its signed QR.</p>
+    </div>
+    <div class="tree" id="tree">
+      <div class="trunk" aria-hidden="true"><i id="trunk-fill"></i></div>
+      <div class="root"><strong>DoseLoop</strong><span>Passive H₂S dose card → photo → on-device scan → shift log and reports</span></div>
+
+      <div class="row">
+        <div class="branch l" style="--c:var(--s1)">
+          <div class="bwrap">
+            <div class="bhead"><small>1 · On the wrist</small><h3>No battery, no electronics</h3><p>Reusable band holds a one-time card that darkens with dose.</p></div>
+            <ul class="leaves">
+              <li class="leaf"><b>Wristband</b><span>About 12 months. FKM straps, 316L buckle and spring bars, orange breakaway link</span></li>
+              <li class="leaf"><b>Cradle + frame</b><span>Antistatic PC/PA12. Clear UV-blocking shutter (green = open, red = closed), 4 corner markers</span></li>
+              <li class="leaf"><b>Sensor card · one-time</b><span>28.6 × 40 × 2.7 mm laminate, swapped by the dock</span>
+                <div class="chips"><em>Copper-acetate strip 9 × 22 mm</em><em>21 holes, 2 mm air gap</em><em>Reference cell + carbon/ZnO</em><em>6-step scale</em><em>Signed colour QR</em><em>Heat dot ~45 °C</em><em>Tear stripe</em></div></li>
+            </ul>
+          </div>
+        </div>
+        <div class="branch r" style="--c:#6fa8e8">
+          <div class="bwrap">
+            <div class="bhead"><small>2 · Capture</small><h3>Start and end of every shift</h3><p>Any phone, or the dock at the gate.</p></div>
+            <ul class="leaves">
+              <li class="leaf"><b>Any smartphone</b><span>Live camera with auto-capture once markers and QR lock, or upload a photo. Web app or Android APK</span><em class="st built">built</em></li>
+              <li class="leaf"><b>Gate dock</b><span>Lid-interlocked light box, 5000 K LEDs, Pi Camera Module 3 on a Pi Zero 2 W. Stepper pusher and foil peeler swap cards from a 25-card magazine</span><em class="st plan">v6 design</em></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow" style="--c:#6fa8e8">photo of the card</div>
+
+      <div class="row">
+        <div class="branch l" style="--c:#4fd1b5">
+          <div class="bwrap">
+            <div class="bhead"><small>3 · Scan engine</small><h3>Runs on the phone, offline</h3><p>OpenCV.js in a background worker. Nothing leaves the device.</p></div>
+            <ul class="leaves">
+              <li class="leaf step"><i>1</i><b>Find and flatten</b><span>Geometry-checked corner markers, perspective warp</span></li>
+              <li class="leaf step"><i>2</i><b>Verify</b><span>Read the QR, check its Ed25519 signature. Fakes are rejected</span></li>
+              <li class="leaf step"><i>3</i><b>Sample</b><span>Light evened in 2 mm cells, median of each patch. Glare, reflection or moiré means retake</span></li>
+              <li class="leaf step"><i>4</i><b>Colour-correct</b><span>Tone curve and 3 × 3 matrix from the printed browns and colour patches</span></li>
+              <li class="leaf step"><i>5</i><b>Self-test</b><span>A held-out brown must land within about 3 ΔE, or the app asks for a retake</span></li>
+              <li class="leaf step"><i>6</i><b>Dose</b><span>Strip ΔE minus reference ΔE, batch curve → ppm·hr with a ± range</span></li>
+              <li class="leaf step"><i>7</i><b>Card checks</b><span>Shutter dot, heat dot, card age and % capacity used</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="branch r" style="--c:#b39cf0">
+          <div class="bwrap">
+            <div class="bhead"><small>4 · App and records</small><h3>Offline-first shift log</h3><p>React + Vite web app, the same code as the Android app.</p></div>
+            <ul class="leaves">
+              <li class="leaf"><b>Shift logic</b><span>Dose = end − start. If a start scan differs from the last end scan, off-shift exposure is flagged. Limits 80 ppm·hr (India) and 8 ppm·hr (ACGIH)</span></li>
+              <li class="leaf"><b>On-device log</b><span>Worker, shift, time, dose ± range, card serial in IndexedDB. Works with no network</span></li>
+              <li class="leaf"><b>Worker app</b><span>Scan, shift history, card status, alerts</span></li>
+              <li class="leaf"><b>Supervisor dashboard</b><span>Team heat map, alerts, cards due for change</span></li>
+              <li class="leaf"><b>Reports</b><span>Exposure register as CSV or PDF in a DGMS/OISD-style format</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow" style="--c:#c9b37a">behind every card</div>
+
+      <div class="row">
+        <div class="branch l" style="--c:#c9b37a">
+          <div class="bwrap">
+            <div class="bhead"><small>Feeds every card</small><h3>Factory and calibration</h3><p>Each card leaves the factory knowing its own colours and dose curve.</p></div>
+            <ul class="leaves chain">
+              <li class="leaf"><b>Print roll</b><span>Copper-acetate ink, 6-step scale and colour modules printed in one pass</span></li>
+              <li class="leaf"><b>Inline spectrophotometer</b><span>Measures the real Lab colour of each roll; cards over 2 ΔE from the roll average are rejected</span></li>
+              <li class="leaf"><b>Lab chamber</b><span>Known H₂S doses → scikit-learn curve fit → calibration per batch</span><em class="st plan">pending lab</em></li>
+              <li class="leaf"><b>Signed QR</b><span>Serial, batch, date, measured colours and curve, signed with Ed25519</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="branch r" style="--c:var(--dim)">
+          <div class="bwrap">
+            <div class="bhead"><small>Build and delivery</small><h3>One codebase, two apps</h3><p>Every change is tested and shipped automatically.</p></div>
+            <ul class="leaves chain">
+              <li class="leaf"><b>GitHub Actions</b><span>Build and scan-pipeline tests on every change</span></li>
+              <li class="leaf"><b>Vercel web app + Android APK</b><span>HTTPS for the camera, installable and offline; the APK link always serves the latest build</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="small muted" style="margin-top:12px">Built today: capture by phone, scan engine, app and records. The dock, spectro-measured QR and thin-plate-spline correction are the v6 design.</p>
+  </section>
+
+  <!-- ===================== HARDWARE ===================== -->
+  <section id="hardware" class="wrap">
+    <div class="head">
+      <h2>Everything lasts a year except a 2.7 mm card.</h2>
+      <p class="lede">Design v6 replaced the moulded pod with a flat laminated card, made on rolls like a medical test strip. It slides into a reusable frame on the band and pushes the old card out of the far end.</p>
+    </div>
+    <div class="nest" aria-label="How the parts nest">
+      <span>Wristband</span><i>holds</i><span>Cradle</span><i>holds</i><span>Frame</span><i>holds</i><span class="once">Sensor card (one-time)</span>
+    </div>
+    <div class="two">
+      <div class="panel">
+        <h3 style="margin-bottom:6px">Inside the sensor card</h3>
+        <p class="small muted" style="margin-bottom:16px">Top (camera side) to bottom (skin side).</p>
+        <div class="stack">
+          <div class="layer"><div class="bar" style="background:#c8ccd0"></div><p>Peel foil <span>keeps the card fresh until the dock strips it</span></p></div>
+          <div class="layer"><div class="bar" style="background:linear-gradient(90deg,var(--s0),var(--s1),var(--s2),var(--s3),var(--s4),var(--s5))"></div><p>Printed layer <span>6-step scale, colour QR, heat dot, shutter dots, tear stripe</span></p></div>
+          <div class="layer"><div class="bar" style="background:repeating-linear-gradient(90deg,#cfdde6 0 10px,#151918 10px 13px)"></div><p>Hole film <span>clear PET, laser-cut 1.0 mm holes: 21 over the strip, 12 over the reference</span></p></div>
+          <div class="layer"><div class="bar" style="background:#f4f4f0"></div><p>PTFE membrane ribbons <span>let gas in, block sweat, water and dust</span></p></div>
+          <div class="layer"><div class="bar" style="background:#2a2a2a"></div><p>Carbon/ZnO ribbons <span>over the reference cell only: remove H₂S, let humidity through</span></p></div>
+          <div class="layer"><div class="bar" style="background:#e9ebe6;height:30px"></div><p>2.0 mm PET spacer <span>fixed air gap, so the dose maths holds</span></p></div>
+          <div class="layer"><div class="bar" style="background:linear-gradient(90deg,var(--s3) 0 55%,var(--s0) 55%)"></div><p>Copper acetate ink <span>sensing lane (9 × 22 mm) and reference cell (9 × 12 mm)</span></p></div>
+          <div class="layer"><div class="bar" style="background:#fbfbfb"></div><p>Metallized white PET backing <span>seals the skin side, white base for true colour</span></p></div>
+        </div>
+      </div>
+      <div style="display:grid;gap:14px;min-width:0">
+        <div class="figs">
+          <figure><img src="img/exploded.jpg" alt="Exploded render: peel foil, frame top, printed card, ribbons, spacer, cradle" width="455" height="608" loading="lazy"><figcaption>Exploded v6 render: frame, card layers and cradle.</figcaption></figure>
+          <figure><img src="img/frame-card.jpg" alt="Render of the frame holding a sensor card, with corner markers and colour QR" width="421" height="278" loading="lazy"><figcaption>Frame with card: corner markers, colour QR, scale and hole windows.</figcaption></figure>
+        </div>
+        <div class="panel">
+          <dl class="spec">
+            <dt>Sensor card</dt><dd>28.6 × 40 × 2.7 mm, one-time</dd>
+            <dt>Frame</dt><dd>32 × 46 × 5 mm, reusable, clear UV-blocking hole shutter (slides 1.5 mm)</dd>
+            <dt>Cradle</dt><dd>38 × 52 × 7.3 mm, matte black antistatic PC/PA12</dd>
+            <dt>Straps</dt><dd>FKM (oil-proof), fits 130–200 mm wrists, 316L buckle and spring bars</dd>
+            <dt>Safety</dt><dd>Orange breakaway link, no batteries, no light metals</dd>
+            <dt>Heat dot</dt><dd>Wax-melt, turns dark for good above about 45 °C in storage</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DOCK ===================== -->
+  <section id="dock" class="wrap">
+    <div class="head">
+      <h2>One dock at the gate changes cards for the whole shift.</h2>
+      <p class="lede">The worker lays the band in the dock and closes the lid. The dock reads the old card one last time, peels a fresh one from a sealed magazine and pushes it in. Old cards drop into a sealed bin as dose evidence.</p>
+    </div>
+    <div class="two">
+      <figure><img src="img/dock.jpg" alt="Render of the motorised dock with a band in the nest, magazine, stepper pusher and camera light box" width="717" height="538" loading="lazy"><figcaption>v6 dock, housing shown clear: stepper pusher, card magazine, foil peeler, camera light box.</figcaption></figure>
+      <div class="panel">
+        <h3 style="margin-bottom:14px">One card change, about 20 seconds (estimate)</h3>
+        <ol class="seq">
+          <li>Band in the nest, lid closed. Motors run only when the lid switch confirms it is shut.</li>
+          <li>The camera reads the old card a final time under fixed 5000 K light.</li>
+          <li>A NEMA 17 stepper pushes the bottom card out of the 25-card magazine.</li>
+          <li>A peel bar and pinch rollers strip its foil on the way.</li>
+          <li>The new card pushes the old one out into the sealed bin.</li>
+          <li>The camera reads the new card's QR, heat dot and reference cell, and links it to the worker.</li>
+        </ol>
+        <p class="small muted" style="margin-top:16px">Raspberry Pi Zero 2 W + Camera Module 3, about 160 × 295 × 200 mm. Prototype parts about ₹8,000–15,000.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== APP ===================== -->
+  <section id="app" class="wrap">
+    <div class="head">
+      <h2>A phone does the lab work.</h2>
+      <p class="lede">The web app and Android app run the full scan pipeline on the phone, offline. Every step is shown on screen so a supervisor can see why a reading was accepted or rejected.</p>
+    </div>
+    <div class="two" style="margin-bottom:30px">
+      <ol class="seq">
+        <li>Find the 4 corner markers and flatten the photo.</li>
+        <li>Decode the QR and check its signature. Fakes are rejected.</li>
+        <li>Sample each patch from many pixels; reject glare and clipping.</li>
+        <li>Correct the colours using the printed browns and colour patches.</li>
+      </ol>
+      <ol class="seq" start="5">
+        <li>Self-test on a held-out brown. Too far off means retake.</li>
+        <li>Strip minus reference cell, read against the scale, gives ppm·hr with a ± range.</li>
+        <li>Check shutter dots, heat dot, card age and capacity used.</li>
+        <li>Log worker, shift, time, dose and card serial. Alert if over limit.</li>
+      </ol>
+    </div>
+    <div class="shots">
+      <figure><img src="img/scan-page-phone.jpg" alt="Scan screen on a phone" width="1170" height="2532" loading="lazy"><figcaption>Scan</figcaption></figure>
+      <figure><img src="img/scan-result-phone.jpg" alt="Scan result with shift dose" width="1170" height="2532" loading="lazy"><figcaption>Shift result</figcaption></figure>
+      <figure><img src="img/worker-dashboard-phone.jpg" alt="Worker dashboard with dose history" width="1170" height="2532" loading="lazy"><figcaption>Worker home</figcaption></figure>
+      <figure><img src="img/supervisor-dashboard-pc.jpg" alt="Supervisor dashboard with team exposure heat map" width="1400" height="875" loading="lazy"><figcaption>Supervisor dashboard: team heat map, alerts, DGMS/OISD-style export</figcaption></figure>
+    </div>
+  </section>
+
+  <!-- ===================== ACCURACY ===================== -->
+  <section id="accuracy" class="wrap">
+    <div class="head">
+      <p class="quote">"We don't trust the printer. We measure every roll, and the app uses the measured colours."</p>
+      <p class="lede">Printed colours vary with ink, paper and press speed, and phone cameras vary with light. Four layers keep the reading honest.</p>
+    </div>
+    <div class="layers4">
+      <div class="panel"><h3>Measure, then encode</h3><p class="small muted" style="margin-top:6px">A spectrophotometer measures the real colour of each roll's printed scale. Those measured values go into the card's QR.</p></div>
+      <div class="panel"><h3>Reject bad prints</h3><p class="small muted" style="margin-top:6px">A camera checks every card on the roll. Cards more than about 2 ΔE from the roll average are thrown out.</p></div>
+      <div class="panel"><h3>Non-linear colour correction</h3><p class="small muted" style="margin-top:6px">The QR's colour modules plus the 6 browns correct the photo with a thin-plate-spline fit, not just white balance. Published work cut error from 90% to 14% this way.</p></div>
+      <div class="panel"><h3>Read it relative</h3><p class="small muted" style="margin-top:6px">Dose comes from strip minus reference cell, the same ink printed in the same pass, so thickness and humidity effects mostly cancel.</p></div>
+    </div>
+  </section>
+
+  <!-- ===================== IMPACT ===================== -->
+  <section id="impact" class="wrap">
+    <div class="head">
+      <h2>Who it helps</h2>
+      <p class="lede">A dose record for every worker changes what each person in the chain can do.</p>
+    </div>
+    <div class="who">
+      <div class="panel"><b>Worker</b><h3>Sees their own dose</h3><p class="small muted">Every shift, in plain words: Safe, Caution or Over limit, with a 7-day trend.</p></div>
+      <div class="panel"><b>Supervisor</b><h3>Spots risk early</h3><p class="small muted">Team heat map and alerts show who is building up exposure, so work can be rotated before a limit.</p></div>
+      <div class="panel"><b>HSE team</b><h3>Targets real hotspots</h3><p class="small muted">Dose data by unit and task points controls at the places that need them.</p></div>
+      <div class="panel"><b>Regulator</b><h3>Gets audit-ready records</h3><p class="small muted">Tamper-evident logs exported as CSV or PDF in a DGMS/OISD-style format.</p></div>
+    </div>
+  </section>
+
+  <!-- ===================== COST ===================== -->
+  <section id="cost" class="wrap">
+    <div class="head">
+      <h2>About ₹1 a shift.</h2>
+      <p class="lede">The chemistry costs under 5 paise. Turning the one-time part from a moulded pod into a laminated card took it from ₹20–46 to ₹4–12. Rough estimates at about 10,000 units, not supplier quotes.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Item</th><th>v5 pod design</th><th class="us">v6 card design</th></tr></thead>
+        <tbody>
+          <tr><td>One-time part</td><td>₹20–46 per pod</td><td class="us">₹4–12 per card</td></tr>
+          <tr><td>Reusable band + frame (about 12 months)</td><td>₹114–218</td><td class="us">₹125–245</td></tr>
+          <tr><td>Per worker per month</td><td>₹30–65</td><td class="us">₹15–35</td></tr>
+          <tr><td>Card life</td><td>Fixed 30 days</td><td class="us">On condition: 80% used or reference drift, maximum set by the lab</td></tr>
+          <tr><td>Dock (one per gate)</td><td>–</td><td class="us">Prototype parts about ₹8,000–15,000</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== VALIDATION ===================== -->
+  <section id="validation" class="wrap">
+    <div class="head">
+      <h2>What's built, and what the lab still has to prove</h2>
+      <p class="lede">All doses, costs and accuracy figures on this page are targets or demo data. Lab validation is pending.</p>
+    </div>
+    <div class="two">
+      <div class="panel">
+        <h3 style="margin-bottom:14px">Built</h3>
+        <ul class="ticks">
+          <li>Working web app with the full scan pipeline, worker and supervisor screens, and report export</li>
+          <li>Android app, built automatically from the same code</li>
+          <li>Printable test cards that the app reads from a real phone camera</li>
+          <li>Parametric Fusion 360 model of the v6 band, card, frame and dock (the 3D model above)</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:14px">Lab tests planned <span class="tag">pending</span></h3>
+        <ul class="ticks">
+          <li>Dose calibration at 5+ levels from about 1 to 240 ppm·hr in a sealed chamber with certified H₂S gas. Target: within ±20% of a calibrated meter.</li>
+          <li>Same dose, different paths: 2 ppm × 8 h must read the same as 16 ppm × 1 h.</li>
+          <li>Detection limit about 1 ppm·hr; humidity, heat and shelf-life tests on the reference cell and heat dot.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h3 style="margin-bottom:14px">Next, after the lab results</h3>
+      <ul class="ticks">
+        <li>Colour JAB Code decoding in the app, and thin-plate-spline correction with the measured colours</li>
+        <li>A high-dose lane or a stain-length lane, only if tests show the single lane saturates or colour still varies</li>
+        <li>PESO/ATEX approval for hazardous zones, and a pilot in one MRPL unit</li>
+        <li>Cloud sync and multi-site dashboards; app in English, Hindi and Kannada with voice prompts</li>
+      </ul>
+    </div>
+  </section>
+
+
+  <!-- ===================== HISTORY ===================== -->
+  <section id="history" class="wrap">
+    <div class="head">
+      <h2>Six versions, each one fixing the last</h2>
+      <p class="lede">Every redesign removed a real weakness: a thrown-away band, no off-shift control, a lid that could snag on machinery, then an expensive moulded pod.</p>
+    </div>
+    <ol class="timeline">
+      <li class="panel ver">
+        <img src="img/versions/v1-concept.jpg" alt="v1 concept render: fully disposable strap with an exploded layer stack" width="1000" height="563" loading="lazy">
+        <div class="body">
+          <div class="vno"><span>v1</span><small>Concept</small></div>
+          <h3>Disposable strap with a layered sensor</h3>
+          <ul>
+            <li>UV window, diffusion cap, PTFE membrane, air-gap spacer</li>
+            <li>Sensing strip read by colour and stain length, with a reference cell</li>
+            <li>Printed colour scale, expiry indicator, QR and corner markers, foil skin barrier</li>
+          </ul>
+          <p class="why"><em>Weakness:</em> the whole band was thrown away.</p>
+        </div>
+      </li>
+      <li class="panel ver">
+        <img src="img/versions/v2-first-cad.jpg" alt="v2 first Fusion 360 model: flat band with a clip-in pod and exploded strip stack" width="600" height="400" loading="lazy">
+        <div class="body">
+          <div class="vno"><span>v2</span><small>First CAD model</small></div>
+          <h3>Reusable band, clip-in pod</h3>
+          <ul>
+            <li>First Fusion 360 model: flat band and a separate sensor pod</li>
+            <li>Strip stack, reference scale, expiry patch and markers on the pod</li>
+            <li>Exploded view of the layers</li>
+          </ul>
+          <p class="why"><em>Weakness:</em> no way to stop the pod sensing between shifts.</p>
+        </div>
+      </li>
+      <li class="panel ver">
+        <img src="img/versions/v3-v4-cradle-lid.jpg" alt="v3 and v4: buckle strap with a cradle and lid holding a disposable pod, closed and exploded views" width="600" height="400" loading="lazy">
+        <div class="body">
+          <div class="vno"><span>v3–v4</span><small>Cradle and lid</small></div>
+          <h3>One pod for many shifts</h3>
+          <ul>
+            <li>Buckle strap and a cradle with rails, lips and a lid to close the pod off-shift</li>
+            <li>Disposable pod: sensing window, reference cell, colour QR, brown scale, expiry wick, tamper tab, peel-off foil</li>
+            <li>Scanned at the start and end of every shift, about 30 days per pod</li>
+          </ul>
+          <p class="why"><em>Weakness:</em> a hinged lid could snag on machinery.</p>
+        </div>
+      </li>
+      <li class="panel ver">
+        <img src="img/versions/v5-pod-shutter.jpg" alt="v5: pod with a flush sliding hole-shutter in a black cradle on an FKM strap" width="600" height="400" loading="lazy">
+        <div class="body">
+          <div class="vno"><span>v5</span><small>Flush shutter pod</small></div>
+          <h3>No lid, a sliding shutter</h3>
+          <ul>
+            <li>Clear hole-shutter slides 1.5 mm, green and red dots show open or closed</li>
+            <li>1.0 mm holes over both windows; carbon/ZnO filter dots in the reference cell</li>
+            <li>FKM straps, orange breakaway link, 316L quick-release, antistatic cradle</li>
+          </ul>
+          <p class="why"><em>Weakness:</em> an 11-part moulded pod at ₹20–46 each.</p>
+        </div>
+      </li>
+      <li class="panel ver now">
+        <img src="img/versions/v6-card-exploded.jpg" alt="v6: exploded laminated sensor card above the reusable frame and cradle" width="600" height="400" loading="lazy">
+        <div class="body">
+          <div class="vno"><span>v6</span><small>Current design</small></div>
+          <h3>Laminated card in a reusable frame</h3>
+          <ul>
+            <li>One-time card, 28.6 × 40 × 2.7 mm, made on rolls for ₹4–12</li>
+            <li>Shutter, rails and markers move to a frame that lasts a year</li>
+            <li>Heat dot replaces the dye-wick; card retired on its condition, not a date</li>
+            <li>Measured print colours stored in the QR</li>
+          </ul>
+          <p class="why"><em>Result:</em> ₹15–35 per worker per month, down from ₹30–65.</p>
+        </div>
+      </li>
+      <li class="panel ver now">
+        <img src="img/versions/v6-dock.jpg" alt="v6 motorised dock with the band in the nest" width="600" height="400" loading="lazy">
+        <div class="body">
+          <div class="vno"><span>v6</span><small>New: the dock</small></div>
+          <h3>Motorised card changer</h3>
+          <ul>
+            <li>Stepper pusher and foil peeler feed cards from a sealed 25-card magazine</li>
+            <li>Pi Zero 2 W and Camera Module 3 read each card under fixed light</li>
+            <li>Old cards kept in a sealed bin as dose evidence</li>
+          </ul>
+          <p class="why"><em>Result:</em> no hand-handling of cards, and a better reading than a phone.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ===================== LINKS + REFERENCES ===================== -->
+  <section id="links" class="wrap">
+    <div class="head"><h2>Links</h2></div>
+    <div class="links">
+      <a class="panel" href="/"><h3>Live web app</h3><span>dose-loop.vercel.app</span></a>
+      <a class="panel" href="https://github.com/safafibm-ops/DoseLoop/releases/download/apk-latest/DoseLoop.apk"><h3>Android APK</h3><span>Latest build, updated automatically</span></a>
+      <a class="panel" href="https://github.com/safafibm-ops/DoseLoop"><h3>Source code</h3><span>github.com/safafibm-ops/DoseLoop</span></a>
+    </div>
+
+    <div style="height:56px"></div>
+    <div class="head"><h2>References</h2></div>
+    <div class="refs">
+      <h3>H₂S hazard, exposure limits and safety</h3>
+      <p>[1] M. Elwood, "The Scientific Basis for Occupational Exposure Limits for Hydrogen Sulphide," IJERPH 18(6) 2866, 2021. <a href="https://doi.org/10.3390/ijerph18062866">doi</a></p>
+      <p>[2] Austigard, Smedbold, "H₂S Exposure Hazard Assessment," Ann. Work Expo. Health 66(1) 124–129, 2022. <a href="https://doi.org/10.1093/annweh/wxab047">doi</a></p>
+      <p>[3] G. Stoppa et al., "Exposure to low levels of hydrogen sulphide and lung function (InVETTA)," PLOS ONE 18(11), 2023. <a href="https://doi.org/10.1371/journal.pone.0293619">doi</a></p>
+      <h3>Passive diffusion dosimetry</h3>
+      <p>[4] S. Venturi et al., "H₂S measurements by passive samplers and high-frequency analyzer," Applied Geochemistry 72, 2016. <a href="https://doi.org/10.1016/j.apgeochem.2016.07.001">doi</a></p>
+      <p>[5] Kiwfo et al., "Smartphone-Based Color Evaluation of Passive Samplers for Gases: A Review," Atmosphere 15(4) 451, 2024. <a href="https://doi.org/10.3390/atmos15040451">doi</a></p>
+      <p>[6] Pruthi, Dixit, "Wearable and sensor-based chemical dosimeters for occupational exposure," J. Public Health, 2026. <a href="https://doi.org/10.1007/s10389-026-02752-w">doi</a></p>
+      <h3>Copper-based colorimetric H₂S sensing</h3>
+      <p>[7] L. Engel et al., "Screen-Printed Sensors for Colorimetric Detection of H₂S in Ambient Air," Sensors 19(5) 1182, 2019. <a href="https://doi.org/10.3390/s19051182">doi</a></p>
+      <p>[8] C. Hong et al., "Colorimetric H₂S detection based on copper-MOFs and a smartphone," Anal. Methods 14(12), 2022. <a href="https://doi.org/10.1039/D2AY00151A">doi</a></p>
+      <p>[9] Shang et al., "Smartphone Imaging Device for H₂S Using Cu-Doped MOF Sensors," ACS AMI 16(24), 2024. <a href="https://doi.org/10.1021/acsami.4c05021">doi</a></p>
+      <h3>Smartphone colorimetry and colour correction</h3>
+      <p>[10] Y. Fan et al., "Digital image colorimetry on smartphone for chemical analysis: A review," Measurement 171, 2021. <a href="https://doi.org/10.1016/j.measurement.2020.108829">doi</a></p>
+      <p>[11] P. Cebrián et al., "Smartphones Color Management for Chemical (Bio)Sensors," Biosensors 12(5) 341, 2022. <a href="https://doi.org/10.3390/bios12050341">doi</a></p>
+      <p>[12] ISO/CIE 11664-6:2022, CIEDE2000 colour-difference formula. <a href="https://www.iso.org/standard/82662.html">iso.org</a></p>
+      <h3>Colour QR and anti-fake cards</h3>
+      <p>[13] I. Benito-Altamirano et al., "Reading Dye-Based Colorimetric Inks Using Color QR Codes," Chemosensors 12(12) 260, 2024. <a href="https://doi.org/10.3390/chemosensors12120260">doi</a></p>
+      <p>[14] L. Engel et al., "Printed sensor labels for ammonia, formaldehyde and H₂S," Sens. Actuators B 330, 2021. <a href="https://doi.org/10.1016/j.snb.2020.129281">doi</a></p>
+      <p>[15] ISO/IEC 23634:2022, JAB Code polychrome bar code. <a href="https://www.iso.org/standard/76478.html">iso.org</a></p>
+      <p>[16] Josefsson, Liusvaara, "EdDSA," RFC 8032, IETF, 2017. <a href="https://www.rfc-editor.org/rfc/rfc8032">rfc-editor.org</a></p>
+      <h3>Marker alignment</h3>
+      <p>[17] Garrido-Jurado et al., "Generation of fiducial marker dictionaries," Pattern Recognition 51, 2016. <a href="https://doi.org/10.1016/j.patcog.2015.09.023">doi</a></p>
+      <p>[18] Romero-Ramirez et al., "Speeded up detection of squared fiducial markers," Image Vis. Comput. 76, 2018. <a href="https://doi.org/10.1016/j.imavis.2018.05.004">doi</a></p>
+      <h3>Wearability and skin contact</h3>
+      <p>[19] Moon, Ju, "Wearable Sensors for Healthcare of Industrial Workers," Electronics 13(19) 3849, 2024. <a href="https://doi.org/10.3390/electronics13193849">doi</a></p>
+      <p>[20] ISO 10993-10:2021, Tests for skin sensitization. <a href="https://www.iso.org/standard/75279.html">iso.org</a></p>
     </div>
   </section>
 </main>
 
-<footer>Team LoopHole · Smart India Hackathon 2026 · Demo data, lab validation pending.</footer>
+<footer>
+  <div class="wrap">
+    <span>Team LoopHole · Smart India Hackathon 2026 · SIH26118 (MRPL)</span>
+    <span>Design v6. Demo data, lab validation pending.</span>
+  </div>
+</footer>
+
+<script>
+  // Watch-style bezel behind the 3D model: 60 minute ticks plus the card's 6 dose steps as an arc.
+  (function drawBezel() {
+    const svg = document.getElementById('bezel'); if (!svg) return;
+    const ns = 'http://www.w3.org/2000/svg', c = 200, r = 188;
+    const el = (n, a) => { const e = document.createElementNS(ns, n); for (const k in a) e.setAttribute(k, a[k]); svg.appendChild(e); return e; };
+    el('circle', { cx: c, cy: c, r: r, fill: 'none', stroke: '#3a4340', 'stroke-width': 1 });
+    el('circle', { cx: c, cy: c, r: r - 30, fill: 'none', stroke: '#2a312f', 'stroke-width': 1 });
+    for (let i = 0; i < 60; i++) {
+      const a = (i / 60) * Math.PI * 2, big = i % 5 === 0, len = big ? 12 : 6;
+      el('line', { x1: c + Math.sin(a) * (r - 4), y1: c - Math.cos(a) * (r - 4), x2: c + Math.sin(a) * (r - 4 - len), y2: c - Math.cos(a) * (r - 4 - len),
+        stroke: big ? '#7d8783' : '#47504d', 'stroke-width': big ? 2 : 1, 'stroke-linecap': 'round' });
+    }
+    const steps = ['#afded0', '#afc8aa', '#a7a271', '#987d51', '#73533a', '#241e1a'], labels = ['0', '10', '25', '50', '100', '200'];
+    const rr = r - 22, span = 300 / 6, start = -150;
+    steps.forEach((col, i) => {
+      const a0 = (start + i * span + 1.5) * Math.PI / 180, a1 = (start + (i + 1) * span - 1.5) * Math.PI / 180;
+      el('path', { d: `M ${c + Math.sin(a0) * rr} ${c - Math.cos(a0) * rr} A ${rr} ${rr} 0 0 1 ${c + Math.sin(a1) * rr} ${c - Math.cos(a1) * rr}`,
+        fill: 'none', stroke: col, 'stroke-width': 7, 'stroke-linecap': 'butt', opacity: .85 });
+      const am = (start + (i + .5) * span) * Math.PI / 180, t = el('text', { x: c + Math.sin(am) * (rr - 17), y: c - Math.cos(am) * (rr - 17) + 4,
+        'text-anchor': 'middle', fill: '#7d8783', 'font-size': 11, 'font-family': 'IBM Plex Sans, sans-serif' });
+      t.textContent = labels[i];
+    });
+  })();
+
+  // Scroll progress bar in the header.
+  const bar = document.getElementById('progress');
+  const onScroll = () => {
+    const h = document.documentElement, max = h.scrollHeight - h.clientHeight;
+    bar.style.transform = `scaleX(${max > 0 ? h.scrollTop / max : 0})`;
+  };
+  addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+  // Reveal sections as they scroll in. Only things below the fold at load are hidden first.
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const items = document.querySelectorAll('section .head, section .panel, section figure, .steps li, .scale, .arch, .table-wrap, .formula, .nest, .refs');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('revealed'); e.target.classList.remove('will-reveal'); io.unobserve(e.target); } });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    items.forEach((it, i) => {
+      if (it.getBoundingClientRect().top > innerHeight) {
+        it.classList.add('will-reveal');
+        it.style.transitionDelay = `${(i % 4) * 70}ms`;
+        io.observe(it);
+      }
+    });
+  }
+
+  // Architecture tree: the trunk grows with scroll, twigs and leaves appear as they come into view.
+  (function tree() {
+    const t = document.getElementById('tree'), fill = document.getElementById('trunk-fill'); if (!t) return;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still || !('IntersectionObserver' in window)) return;
+    const box = t.getBoundingClientRect();
+    if (box.top < innerHeight * 0.6) return;            // already on screen at load: show it complete
+    t.classList.add('anim');
+    const grow = () => {
+      const r = t.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, (innerHeight * 0.75 - r.top) / r.height));
+      fill.style.setProperty('--grow', p.toFixed(3));
+    };
+    addEventListener('scroll', grow, { passive: true }); grow();
+    const io = new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); }
+    }), { rootMargin: '0px 0px -12% 0px' });
+    t.querySelectorAll('.bhead, .leaf, .flow').forEach((n) => {
+      const sibs = n.parentElement ? [...n.parentElement.children] : [];
+      n.style.transitionDelay = `${Math.min(sibs.indexOf(n), 6) * 60}ms`;
+      io.observe(n);
+    });
+  })();
+
+  // Switch the 3D model between the wristband, the exploded card and the dock.
+  const mv = document.getElementById('mv');
+  const cap = document.getElementById('mv-cap');
+  const captions = {
+    'models/band.glb': 'v6 wristband, shutter open. Drag to turn, pinch to zoom.',
+    'models/exploded.glb': 'Card layers pulled apart above the frame and cradle, with the peel foil.',
+    'models/dock.glb': 'Motorised dock with the band in the nest. Housing and lid shown clear.',
+  };
+  document.querySelectorAll('.views button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.views button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      mv.src = b.dataset.src;
+      mv.cameraOrbit = b.dataset.orbit;
+      cap.textContent = captions[b.dataset.src];
+    });
+  });
+</script>
 </body>
 </html>
