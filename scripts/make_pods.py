@@ -3,7 +3,6 @@
 Outputs
   print/pod_face_<dose>.png   flat faces (40 px/mm) at 8 doses
   print/pod_faces_A4.pdf      the same faces at true size (46 x 32 mm) to print and photograph
-  public/print/doseloop-test-badges.pdf  big printable demo badges (3x size, easy for any camera)
   public/samples/*.jpg        simulated phone photos (lighting, tilt, noise, glare...)
   public/samples/manifest.json  what each photo shows and its true dose
   src/scan/publicKey.json     public key the app uses to check QR signatures
@@ -17,7 +16,7 @@ import json
 import cv2
 import numpy as np
 from nacl.signing import SigningKey
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 from podlib import ROOT, SPEC, draw_face, linear_to_srgb, qr_payload, srgb_to_linear
 
@@ -62,45 +61,7 @@ for k, (dose, face) in enumerate(faces):
     sheet = Image.fromarray(cv)
 sheet.save(out_print / "pod_faces_A4.pdf", resolution=DPI, quality=95, subsampling=0)
 
-# ---------- big demo badges (what judges print to try the live camera) ----------
-# Each pod face is printed 3x size (138 x 96 mm): the QR dots are 0.8 mm, readable by laptop webcams.
-BIG = 3
-BDPI = 300
-bpx = lambda mm: int(round(mm / 25.4 * BDPI))
-
-
-def badge_page(items, title):
-    page = Image.new("RGB", (bpx(210), bpx(297)), "white")
-    d = ImageDraw.Draw(page)
-    font = lambda mm: ImageFont.load_default(size=bpx(mm))
-    d.text((bpx(15), bpx(10)), title, fill="#111111", font=font(5))
-    d.text((bpx(15), bpx(17)), "Print at 100% / Actual size on plain A4 paper. Demo data, lab validation pending.", fill="#555555", font=font(3))
-    w, h = SPEC["size_mm"][0] * BIG, SPEC["size_mm"][1] * BIG
-    for k, (label, face) in enumerate(items):
-        x, y = (210 - w) / 2, 34 + k * (h + 30)
-        d.text((bpx(x), bpx(y - 8)), label, fill="#111111", font=font(4.2))
-        page.paste(face.resize((bpx(w), bpx(h)), Image.LANCZOS), (bpx(x), bpx(y)))
-        d.rectangle([bpx(x) - 3, bpx(y) - 3, bpx(x + w) + 3, bpx(y + h) + 3], outline="#c8c8c8", width=2)
-    d.text((bpx(15), bpx(282)), "DoseLoop app: Scan > Camera, then hold the badge flat in front of the camera. It captures by itself.",
-           fill="#555555", font=font(3))
-    return page
-
-
-def face(payload, dose, humid, **kw):
-    return draw_face(payload, dose, humidity=humid, serial=SERIAL, batch=BATCH, ppm=60, **kw)
-
-
-pages = [
-    badge_page([("1  Shift START  (new pod, 0 ppm·hr)", face(GOOD, 0, 0.3, wick=0.15)),
-                ("2  Shift END  (25 ppm·hr this shift)", face(GOOD, 25, 0.5, wick=0.2))], "DoseLoop test badges: one shift"),
-    badge_page([("3  Copied pod  (fake signature: must be rejected)", face(FAKE, 10, 0.5, wick=0.2)),
-                ("4  Shutter left closed  (start scan must refuse it)", face(GOOD, 18, 1.0, shutter_open=False, wick=0.2))],
-               "DoseLoop test badges: things the app must catch"),
-]
-out_pub = ROOT / "public/print"
-out_pub.mkdir(parents=True, exist_ok=True)
-pages[0].save(out_pub / "doseloop-test-badges.pdf", save_all=True, append_images=pages[1:], resolution=BDPI, quality=95, subsampling=0)
-pages[0].resize((pages[0].width // 4, pages[0].height // 4), Image.LANCZOS).save(out_pub / "doseloop-test-badges-preview.png")
+# Big printable demo badges: see scripts/make_badges.py
 
 # ---------- simulated phone photos ----------
 LIGHTS = {  # per-channel gain in linear light
