@@ -1,166 +1,149 @@
-# DoseLoop
+<p align="center">
+  <img src="docs/readme/hero.jpg" alt="DoseLoop: v6 sensor card exploded view and the motorised card dock" width="100%">
+</p>
 
-Team LoopHole · SIH26118 (MRPL) · Passive colorimetric H₂S dosimeter wristband + phone reader.
+<p align="center">
+  <a href="https://dose-loop.vercel.app"><img src="https://img.shields.io/badge/Live_demo-dose--loop.vercel.app-2dd4bf?style=for-the-badge" alt="Live demo"></a>
+  <a href="https://github.com/safafibm-ops/DoseLoop/releases/download/apk-latest/DoseLoop.apk"><img src="https://img.shields.io/badge/Android-APK-4ade80?style=for-the-badge&logo=android&logoColor=white" alt="Android APK"></a>
+  <a href="https://dose-loop.vercel.app/project/"><img src="https://img.shields.io/badge/Project-docs-60a5fa?style=for-the-badge" alt="Project docs"></a>
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/SIH_2026-SIH26118_·_MRPL-f5a524" alt="SIH26118">
+  <img src="https://img.shields.io/badge/React_19-Vite_8-61dafb?logo=react&logoColor=white" alt="React + Vite">
+  <img src="https://img.shields.io/badge/OpenCV.js-on--device-5c3ee8?logo=opencv&logoColor=white" alt="OpenCV.js">
+  <img src="https://img.shields.io/badge/PWA-offline--first-a78bfa" alt="PWA">
+  <img src="https://img.shields.io/badge/status-lab_validation_pending-lightgrey" alt="Status">
+</p>
 
-A PWA (React + Vite) that reads a photo of the H₂S pod and logs each worker's dose (ppm·hr) per shift.
-Full design: [docs/MASTER.md](docs/MASTER.md). Build rules: [CLAUDE.md](CLAUDE.md).
+**DoseLoop** measures how much hydrogen sulphide (H₂S) each worker actually absorbs, shift by shift. A battery-free colorimetric sensor card on a reusable wristband darkens permanently with dose. Any phone, or a gate dock, photographs it at the start and end of every shift. An on-device AI vision pipeline turns the colour into a lighting-corrected dose in **ppm·hr** and logs it against the worker, shift and card, ready for audit.
 
-> **Demo data, lab validation pending.** All doses, costs and accuracy figures are targets or placeholders.
+> **Demo data, lab validation pending.** Doses, colour curve, costs and accuracy figures are design targets until lab calibration with certified H₂S gas.
+
+**Try it in 2 minutes, no card and no login:** open the [live demo](https://dose-loop.vercel.app) → **Try demo** → *Ravi Kumar (worker)*. A guided tour walks through a shift start, shift end, an off-shift leak, a fake card and the supervisor report.
+
+---
+
+## Problems we solved
+
+Occupational H₂S limits are written as a **dose over time** (India: 10 ppm × 8 h = 80 ppm·hr per shift; ACGIH: 8 ppm·hr). Plants mostly measure **peaks**. DoseLoop measures the dose, and works **alongside** gas alarms, not instead of them.
+
+### 1. Colour and lighting correction: the dock and the colour QR
+
+A colour sensor is only as good as its reading. Every phone boosts colour differently, plant lights are yellow or blue, and printers print a little lighter or darker on every roll. We attack this at both ends:
+
+- **Colour QR with measured colours** *(v6 design; the app already corrects against the printed scale)*. At the factory an inline spectrophotometer measures each printed roll, and the **real** measured colours (not the intended ones) go into the card's signed QR. Every photo also carries a 6-step brown scale and colour modules beside the strip, so the app corrects each photo against a chart whose true values it already knows. A held-out brown checks the correction on every scan; a bad photo means a retake.
+- **The gate dock** *(v6 design)*. At the shift gate, a closed light box with high-CRI 5000 K LEDs and a fixed Raspberry Pi camera reads every card under the **same light, distance and angle**, so phone and lighting differences disappear. The dock also swaps the card hands-free.
+- **Relative reading.** The dose is strip minus reference cell (same ink, same print), so leftover ink and print differences cancel.
+
+<p align="center"><img src="docs/readme/colour.png" alt="Five layers that stop colour errors: factory measurement, reference on every card, photo correction with self-test, strip minus reference, dock light box" width="100%"></p>
+
+In a simulated cross-device test, the phone-vs-laptop shift-dose gap for screen photos dropped from **2.0 to 1.2 ppm·hr** on average (10.3 to 5.4 at worst), with 43 of 48 differences inside the reported ± range. Details in [docs/TECHNICAL.md](docs/TECHNICAL.md).
+
+### 2. Exposure between shifts
+
+A clear sliding shutter is opened at shift start (green dot) and closed at shift end (red dot). The app compares each start scan with the previous end scan, so any colour change off shift is flagged as a possible leak or misuse. One card therefore gives a separate dose for every shift, not one number at the end of the month.
+
+### 3. Humidity, heat and ageing
+
+Copper-acetate ink reacts slightly to humidity and age. A **reference cell** with the same ink sits under a carbon/ZnO filter that blocks H₂S but lets humidity and heat through. Subtracting it cancels weather and ageing. A **heat dot** (wax melt, ~45 °C) turns dark for good if a card ever overheats, and the app then rejects it.
+
+### 4. Fake, swapped or reused cards
+
+Each card's QR carries its serial, batch and colours, signed with **Ed25519**. The app checks the signature offline, so a copied or edited code fails. The first scan binds the card to one worker, and a tamper stripe shows if it was pulled out.
+
+### 5. Cost
+
+The v5 moulded pod had 11 parts and cost about ₹20–46. The v6 card is made on rolls like a test strip, so the one-time part drops to **₹4–12** and the total to about **₹15–35 per worker per month**, including the band (estimates, not quotes).
+
+### Other gaps we closed
+
+| Gap | Today | DoseLoop |
+|---|---|---|
+| Per-worker cumulative dose | Electronic monitors alarm on peaks; ₹15,000–40,000 each plus calibration gas | ppm·hr for every worker and every shift |
+| Reading colour badges | By eye, in coarse steps, one shift only | Exact dose with a ± range from a 10-second scan |
+| Lab samplers | Results take days | Read on site, fully offline |
+| Bad photos (glare, screens, tilt, sodium lamps) | Wrong readings | Light evening, glare, reflection and moiré checks force a retake; tilted and upside-down photos are corrected |
+| Batteries in hazardous zones | Electronics need charging and approval | Nothing powered on the wrist |
+| Handling a reagent card | By hand | Dock peels the foil and swaps the card; the used card goes to a sealed evidence bin |
+| Paper registers for audits | Manual and easy to lose | PDF/CSV exposure register (DGMS/OISD style) and a supervisor dashboard |
+
+## Features
+
+| Hardware (v6 design) | Software (built and live) |
+|---|---|
+| **One-time sensor card**, 28.6 × 40 × 2.7 mm laminate: copper-acetate strip behind 21 × Ø1.0 mm holes and a 2 mm air gap (Fick's-law diffusion) | **Live camera auto-capture**: locks when the 4 markers and QR are found; upload and sample photos too |
+| **Reference cell** under carbon/ZnO filter: same ink, no H₂S, cancels humidity, heat and ageing | **Visual scan pipeline**: every step drawn on the photo (markers, warp, QR, patches, correction, self-test, dose) |
+| **6-step brown scale + signed colour QR** printed on every card, so each photo carries its own colour chart | **Dose ± range** from a second reading path and leave-one-out refits |
+| **Heat dot** (~45 °C wax melt) and **tamper tear stripe** retire mishandled cards | **Shift log**: dose = end − start, off-shift flag, 80 ppm·hr limit, alerts |
+| **Reusable wristband**: FKM strap, 316L hardware, antistatic cradle, safety-orange breakaway link, flush UV-blocking shutter | **Supervisor dashboard**: team heatmap, alerts, cards due, worker drill-down |
+| **Motorised gate dock**: swaps cards hands-free and reads them in a fixed high-CRI light box | **Exposure register** export as PDF/CSV (DGMS/OISD style); offline IndexedDB; PWA + Android APK |
+
+## Architecture
+
+<p align="center"><img src="docs/readme/architecture.png" alt="DoseLoop system architecture: wearable card, capture by phone or dock, on-device scan engine, app and records, factory calibration, build and delivery" width="100%"></p>
+
+Everything after the photo runs **on the device**: OpenCV.js in a Web Worker, no server, no network after the first load. Card layout and true colours live in one file ([`src/scan/podSpec.json`](src/scan/podSpec.json)) shared by the app and the Python generators, so the printed card and the reader never disagree.
+
+## Screens
+
+<p align="center"><img src="docs/readme/screens.png" alt="Worker home, live scan, scan result and supervisor dashboard" width="100%"></p>
+<p align="center"><sub>Worker home · live scan · scan result with every pipeline step · supervisor dashboard</sub></p>
+
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| App | React 19, Vite 8, vite-plugin-pwa, Capacitor 8 (Android APK) |
+| Vision | OpenCV.js (markers, warp, colour), jsQR + OpenCV QR reader, CIE Lab ΔE |
+| Trust | tweetnacl Ed25519 signatures on every card QR |
+| Data | IndexedDB (idb-keyval), jsPDF reports, CSV |
+| Modelling | Python: NumPy, Pillow, OpenCV, scikit-learn dose curve exported as JSON |
+| CAD | Autodesk Fusion 360 (scripted models of band, card and dock) |
+| Delivery | GitHub Actions (lint, tests, build, APK release), Vercel (HTTPS for the camera) |
 
 ## Run it locally
 
 ```bash
-npm install      # once, downloads libraries
-npm run dev      # opens a local server, usually http://localhost:5173
-npm test         # scan pipeline on every sample photo (also turned 90/180/270°), shift log rules
-npm run build    # makes the production version in dist/
+npm install
+npm run dev      # http://localhost:5173
+npm test         # scan pipeline on every sample and adverse photo, shift-log rules
+npm run build
 ```
 
-## Try the demo (no pod, no login, under 2 minutes)
+No card? Print [`public/print/doseloop-test-badges.pdf`](public/print/doseloop-test-badges.pdf) at 100% and point the camera at it.
 
-Open the site → **Try demo** → keep *Guide me through the 2-minute demo* ticked → **Ravi Kumar (worker)**.
-A guide card on the side explains each of the six steps, and a glass pop-up points at the exact button to tap next
-(`src/components/Coach.jsx`):
-
-1. **Start the shift**: tap the pulsing sample photo; every pipeline step opens one by one.
-2. **End the shift**: the shift dose (end − start) is logged and compared with the 80 ppm·hr limit.
-3. **Catch off-shift exposure**: the next start scan is higher than the last end scan, so it is flagged.
-4. **Reject a fake pod**: a copied QR fails the signature check and raises a critical alert.
-5. **Supervisor view**: team heatmap, who is on shift, open alerts, pods due for replacement.
-6. **Export the register**: download the exposure register as PDF or CSV.
-
-The team history (8 workers, 5 weeks) is seeded demo data, saved offline in the browser. Starting the guided demo again resets it.
-
-## Screens (src/screens/)
-
-| Screen | Path | What it shows |
-|---|---|---|
-| Landing | `#/` | Pitch, live pod face with a dose slider |
-| Demo login | `#/login` | Worker or supervisor, optional guided tour |
-| Home | `#/w/home` | Shift card, last dose vs limit, pod capacity ring, 7-day bars, alerts |
-| Scan | `#/w/scan` | Live camera with auto-capture, upload, sample photos; the 8 pipeline steps shown visually |
-| History | `#/w/history` | 14-day doses and every shift with off-shift flags |
-| Pod status | `#/w/pod` | Pod face, retire checks (days, capacity, expiry, shutter), reading over time |
-| Alerts | `#/w/alerts`, `#/s/alerts` | Open and handled alerts, acknowledge |
-| Supervisor dashboard | `#/s/dashboard` | KPIs, team dose heatmap, team list, needs attention |
-| Worker detail | `#/s/worker/W-1042` | One worker's shifts and pod |
-| Reports | `#/s/reports` | Exposure register preview, PDF and CSV export |
-
-Logic lives in `src/data/`: `log.js` turns scans into shifts and alerts (pure functions, tested in
-`log.test.js`), `seed.js` makes the demo team, `store.jsx` saves everything offline in IndexedDB.
-Limits used: 80 ppm·hr per 8-h shift (India, 10 ppm TWA); ACGIH 8 ppm·hr shown as a stricter reference.
-
-## Live scan view
-
-When a photo is scanned, the Scan screen shows each stage on the photo itself as it happens: corner markers
-found, the pod straightened (rotation and tilt), the QR signature checked, every colour area sampled, a
-before/after slider for the colour correction, the self-test, strip minus reference, and the pod checks.
-The step list shows only the current step; **Show all** opens every step with its details.
-
-The scan engine (OpenCV.js + the pipeline) runs in a background worker (`src/scan/scanWorker.js`), so the
-screen stays smooth, a stuck scan times out cleanly, and a broken file gives a clear message. Everything is
-bundled with the app: no network is needed after the first visit (PWA) or at all (Android app).
-
-## Live camera and printed test badges
-
-**📷 Camera** on the Scan screen opens a live camera inside the app (laptop webcam, phone browser or the
-Android app). The browser asks for camera permission the first time. While the camera runs, a few frames a
-second are checked in the background: the pod outline turns amber when the 4 corner markers are found and
-green when the QR reads, and the photo is then taken by itself (`src/components/CameraScan.jsx`). If the
-camera is blocked or missing, the app says how to allow it and offers a normal photo instead.
-
-No pod? Print **`public/print/doseloop-test-badges.pdf`** (link on the Scan screen) on plain A4 at 100%:
-page 1 has a shift-start and a shift-end badge, page 2 a copied pod and a closed shutter. They are the pod
-face at 3× size, so even a laptop webcam can read them. Printed colours are never exactly the lab colours, so
-a printed badge reads close to, not exactly, its label (demo data, lab validation pending).
-
-### Built for bad photos
-
-| Problem in real photos | What the scan does |
-|---|---|
-| Strong tilt, markers of very different sizes | Picks the 4 markers whose sizes and spacing match the pod's real geometry for that perspective (`markers.js`) |
-| Several pods on one sheet, other square shapes | Same geometry check rejects mixed groups; the biggest pod nearest the middle wins |
-| Dim, noisy or low-contrast photos | Up to 7 threshold settings, including contrast-equalised and half-size passes |
-| Small or blurry QR | Read from the full-resolution photo (up to 3200 px), at 3 sizes × 4 clean-ups, then OpenCV's own QR reader (`qr.js`) |
-| Dense QR | New pods use a compact code (`DL2:…`, version 6, 41×41 dots instead of 49×49); old `DL1|…` pods still verify |
-| Shadow or lamp on one side | The plain pod background is measured in 2 mm cells and the light is evened out before sampling (`light.js`) |
-| Phone tone curves and colour boost | Flexible tone curve through the greys, background and marker black, a 3×3 matrix, then a local fix from the printed browns (`color.js`) |
-| White patch blown out on a bright day | Left out of the fit instead of failing; glare on the strip, reference or browns still means retake |
-| Photo of a laptop screen (screen colours, sub-pixels) | The strip and reference are read straight against the 6 printed browns in the same photo, so whatever the screen and camera did to them cancels out (`readAgainstScale` in `color.js`) |
-| Reflection of a window or lamp on the screen or glossy paper | The 4 corner markers are the same black; if one corner reads much lighter, the app asks for a retake |
-| Moiré stripes from a screen | Plain patches that look streaky (smoothed spread over 4 ΔE) mean retake |
-| Upside down or rotated | The QR corner decides which way up the pod is |
-
-`test/adverse/` holds 14 simulated photos of a **printed** badge (printer, light, camera and blur effects from
-`scripts/make_adverse.py`); `npm test` scans all of them. For a bigger random run:
-`python3 scripts/make_adverse.py --stress 80 ../stress` then `STRESS_DIR=../stress npx vitest run test/adverse.test.js`.
-
-### Same badge, laptop vs phone
-
-Every reading comes with a **± range** (for example `6.3 ± 0.8 ppm·hr`). It comes from two checks: the dose is
-read a second way (through the full colour correction instead of straight against the browns), and that reading
-is redone 6 times, each without one brown step. Calm, even photos give a small ±; glare, screens and odd light
-make it wider. A shift's ± combines its start and end scans.
-
-`python3 scripts/make_adverse.py --gap ../gap 12` makes start + end photos of the same badges taken by a laptop
-webcam and three phones (printed badge), and by three phones off a laptop screen showing the demo sample photos;
-`GAP_DIR=../gap npx vitest run test/adverse.test.js --silent=false` compares the shift doses. Simulated result
-(12 scenes, 24 pairs each, demo data, lab validation pending):
-
-| Shift dose difference | Before | Now |
-|---|---|---|
-| Printed badge, phone vs laptop webcam: average / largest | 2.0 / 6.9 ppm·hr | 1.8 / 5.7 ppm·hr |
-| Phone photo of the laptop screen vs the laptop: average / largest | 2.0 / 10.3 ppm·hr | 1.2 / 5.4 ppm·hr |
-| Difference inside the two ± ranges | – | 43 of 48 |
-
-Screen photos with a strong reflection are now sent back for a retake (8 of the 32 the old scan accepted, 3 of
-them 6–8 ppm·hr off).
-
-## Android app (Phase 5)
-
-The Android app wraps the same web app with Capacitor (`android/`, `capacitor.config.json`).
-
-- **Download:** the **📲 Get the app** button (top-right of the landing and login screens) links to the latest
-  APK. GitHub Actions (`.github/workflows/android.yml`) builds it on every PR and publishes it as the
-  `apk-latest` release on every push to `main`.
-- **Install:** open `DoseLoop.apk` on the phone and allow "install unknown apps" once. It is a debug build for testing.
-- **iPhone:** open the site in Safari → Share → Add to Home Screen (works offline). A native iOS build needs an
-  Apple developer account and a Mac.
-- **Build it yourself:** `npm run android`, then open `android/` in Android Studio (needs JDK 21 and the Android SDK).
-
-## How a scan works (src/scan/pipeline.js)
-
-1. Find the 4 corner markers and straighten the photo into a flat pod view (OpenCV.js).
-2. Read the QR (jsQR, OpenCV as a second reader) and check its Ed25519 signature (tweetnacl). Fakes are rejected.
-3. Even out the light across the pod, then sample every colour patch (median of many pixels); reject glare, a
-   reflection over part of the pod (corner blacks differ), and moiré stripes (streaky plain patches).
-4. Colour correction: tone curve from the greys, background and black, a 3×3 matrix (browns weighted 3×), a
-   local fix, then a curve through all 6 printed browns. The strip and reference are read straight against
-   the 6 browns in the photo.
-5. Self-test: the 25 ppm·hr brown is held out. Up to 3 ΔE off after correction is full confidence; 3–6 ΔE keeps
-   the reading but flags it as less certain; more than 6 ΔE means retake.
-6. Strip ΔE − reference ΔE (from fresh ink, in Lab) → batch curve → ppm·hr, with a ± range.
-7. Check shutter dot, expiry wick, pod age and % capacity.
-
-Layout and true colours of the pod face live in `src/scan/podSpec.json`, shared with the Python scripts.
-
-## Sample pods (scripts/)
-
-```bash
-python3 -m pip install numpy pillow qrcode pynacl scikit-learn opencv-python-headless
-python3 scripts/fit_curve.py   # fits the placeholder dose curve -> src/scan/calibration/C1.json
-python3 scripts/make_pods.py   # pod faces (print/), A4 sheets, test badges (public/print/), sample photos
-python3 scripts/make_adverse.py # printed-badge test photos for npm test (test/adverse/)
-python3 scripts/make_adverse.py --gap ../gap 12  # laptop vs phone pairs, incl. photos of a laptop screen
+```text
+src/scan/      scan engine: markers, QR + signature, light, colour, pipeline, Web Worker
+src/data/      shift logic, limits, seeded demo team, offline store
+src/screens/   landing, worker, live scan, supervisor
+scripts/       card face generator, dose-curve fit, adverse photo simulator
+test/          adverse and cross-device photo tests
+docs/          MASTER.md (full design), TECHNICAL.md (scan details)
 ```
 
-`print/pod_faces_A4.pdf` prints the pod faces at true size (46 × 32 mm) at 100% scale. Photograph them with
-different phones and lights to test with real photos.
+## Hardware evolution: v1 → v6
 
-The ink colours and dose curve are **placeholders** until lab calibration. `make_pods.py` creates a private
-signing key in `scripts/.keys/` (not committed); running it again on another computer makes a new key and
-re-signs all samples, which is fine.
+| | | |
+|:---:|:---:|:---:|
+| <img src="docs/readme/v1-concept.png" width="260"><br>**v1 · Concept**<br><sub>Fully disposable strap with a layered stack: UV window, diffusion cap, PTFE membrane, stain-length strip</sub> | <img src="docs/readme/v2-first-cad.png" width="260"><br>**v2 · First CAD**<br><sub>Flat band and a clip-in pod with strip stack, colour scale, markers and expiry patch</sub> | <img src="docs/readme/v3-v4-cradle-lid.png" width="260"><br>**v3–v4 · Reusable band**<br><sub>Buckle strap and cradle with a lid; disposable pod with peel foil and tamper tab</sub> |
+| <img src="docs/readme/v5-pod-shutter.png" width="260"><br>**v5 · Flush shutter pod**<br><sub>Sliding hole-shutter, filter dots in the reference cell, FKM straps with breakaway link</sub> | <img src="docs/readme/v6-card-exploded.png" width="260"><br>**v6 · Sensor card layers**<br><sub>Roll-made one-time card (₹4–12); heat dot replaces the dye-wick</sub> | <img src="docs/readme/v6-card-in-frame.png" width="260"><br>**v6 · Card in reusable frame**<br><sub>A new card pushes the old one out; shutter and markers stay on the frame</sub> |
+| <img src="docs/readme/v6-band-worn.png" width="260"><br>**v6 · Worn band**<br><sub>Same reusable band and cradle as v5, with a new exit slot</sub> | <img src="docs/readme/v6-dock.png" width="260"><br>**v6 · Motorised dock**<br><sub>Stepper pusher, foil peeler, Pi Zero 2 W camera light box, sealed 25-card magazine</sub> | |
 
-## Deploy
+Each step removed a real weakness: a thrown-away band (v1), no shift on/off control (v2), a lid that could snag on machinery (v3–v4), and an expensive 11-part moulded pod (v5).
 
-Hosted on Vercel (HTTPS is needed for the phone camera). Every push to `main` redeploys.
+## Roadmap
+
+- [x] Wristband, pod and card designs v1–v6 in Fusion 360, with bill of materials
+- [x] Scan engine, worker and supervisor app, PWA and Android APK, CI on every pull request
+- [x] Adverse-photo and cross-device test suite with printable test badges
+- [ ] **Lab calibration**: sealed chamber, certified H₂S, 5+ doses from ~1 to 240 ppm·hr; target ±20% of true dose
+- [ ] Prove a true dose response (2 ppm × 8 h = 16 ppm × 1 h), humidity 30–90% RH, heat 20–45 °C, 90-day shelf life
+- [ ] Update the app to the v6 card face: heat dot, colour modules, thin-plate-spline correction
+- [ ] Build the dock prototype (3D-printed housing, Pi Zero 2 W, NEMA 17, N20)
+- [ ] JAB Code colour QR carrying the spectro-measured colours
+- [ ] Pilot in one MRPL unit, then plant-wide; optional server sync for multi-site supervisors
+- [ ] PESO/ATEX certification for hazardous zones; extra high-dose or stain-length lane only if validation needs it
+
+---
+
+<p align="center"><sub>Team LoopHole · Smart India Hackathon 2026 · Problem statement SIH26118 (MRPL)<br>Full design reference: <a href="docs/MASTER.md">docs/MASTER.md</a> · Demo data, lab validation pending</sub></p>
