@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/readme/hero.jpg" alt="DoseLoop: v6 sensor card exploded view and the motorised card dock" width="100%">
+  <img src="docs/docs/readme/hero.jpg" alt="DoseLoop: v6 sensor card exploded view and the motorised card dock" width="100%">
 </p>
 
 <p align="center">
@@ -35,9 +35,9 @@ A colour sensor is only as good as its reading. Every phone boosts colour differ
 - **The gate dock** *(v6 design)*. At the shift gate, a closed light box with high-CRI 5000 K LEDs and a fixed Raspberry Pi camera reads every card under the **same light, distance and angle**, so phone and lighting differences disappear. The dock also swaps the card hands-free.
 - **Relative reading.** The dose is strip minus reference cell (same ink, same print), so leftover ink and print differences cancel.
 
-<p align="center"><img src="docs/readme/colour.png" alt="Five layers that stop colour errors: factory measurement, reference on every card, photo correction with self-test, strip minus reference, dock light box" width="100%"></p>
+<p align="center"><img src="docs/docs/readme/colour.png" alt="Five layers that stop colour errors: factory measurement, reference on every card, photo correction with self-test, strip minus reference, dock light box" width="100%"></p>
 
-In a simulated cross-device test, the phone-vs-laptop shift-dose gap for screen photos dropped from **2.0 to 1.2 ppm·hr** on average (10.3 to 5.4 at worst), with 43 of 48 differences inside the reported ± range. Details in [docs/TECHNICAL.md](docs/TECHNICAL.md).
+In a simulated cross-device test, the phone-vs-laptop shift-dose gap for screen photos dropped from **2.0 to 1.2 ppm·hr** on average (10.3 to 5.4 at worst), with 43 of 48 differences inside the reported ± range. Details in [docs/docs/TECHNICAL.md](docs/docs/TECHNICAL.md).
 
 ### 2. Exposure between shifts
 
@@ -80,13 +80,13 @@ The v5 moulded pod had 11 parts and cost about ₹20–46. The v6 card is made o
 
 ## Architecture
 
-<p align="center"><img src="docs/readme/architecture.png" alt="DoseLoop system architecture: wearable card, capture by phone or dock, on-device scan engine, app and records, factory calibration, build and delivery" width="100%"></p>
+<p align="center"><img src="docs/docs/readme/architecture.png" alt="DoseLoop system architecture: wearable card, capture by phone or dock, on-device scan engine, app and records, factory calibration, build and delivery" width="100%"></p>
 
 Everything after the photo runs **on the device**: OpenCV.js in a Web Worker, no server, no network after the first load. Card layout and true colours live in one file ([`src/scan/podSpec.json`](src/scan/podSpec.json)) shared by the app and the Python generators, so the printed card and the reader never disagree.
 
 ## Screens
 
-<p align="center"><img src="docs/readme/screens.png" alt="Worker home, live scan, scan result and supervisor dashboard" width="100%"></p>
+<p align="center"><img src="docs/docs/readme/screens.png" alt="Worker home, live scan, scan result and supervisor dashboard" width="100%"></p>
 <p align="center"><sub>Worker home · live scan · scan result with every pipeline step · supervisor dashboard</sub></p>
 
 ## Tech stack
@@ -125,9 +125,9 @@ docs/          MASTER.md (full design), TECHNICAL.md (scan details)
 
 | | | |
 |:---:|:---:|:---:|
-| <img src="docs/readme/v1-concept.png" width="260"><br>**v1 · Concept**<br><sub>Fully disposable strap with a layered stack: UV window, diffusion cap, PTFE membrane, stain-length strip</sub> | <img src="docs/readme/v2-first-cad.png" width="260"><br>**v2 · First CAD**<br><sub>Flat band and a clip-in pod with strip stack, colour scale, markers and expiry patch</sub> | <img src="docs/readme/v3-v4-cradle-lid.png" width="260"><br>**v3–v4 · Reusable band**<br><sub>Buckle strap and cradle with a lid; disposable pod with peel foil and tamper tab</sub> |
-| <img src="docs/readme/v5-pod-shutter.png" width="260"><br>**v5 · Flush shutter pod**<br><sub>Sliding hole-shutter, filter dots in the reference cell, FKM straps with breakaway link</sub> | <img src="docs/readme/v6-card-exploded.png" width="260"><br>**v6 · Sensor card layers**<br><sub>Roll-made one-time card (₹4–12); heat dot replaces the dye-wick</sub> | <img src="docs/readme/v6-card-in-frame.png" width="260"><br>**v6 · Card in reusable frame**<br><sub>A new card pushes the old one out; shutter and markers stay on the frame</sub> |
-| <img src="docs/readme/v6-band-worn.png" width="260"><br>**v6 · Worn band**<br><sub>Same reusable band and cradle as v5, with a new exit slot</sub> | <img src="docs/readme/v6-dock.png" width="260"><br>**v6 · Motorised dock**<br><sub>Stepper pusher, foil peeler, Pi Zero 2 W camera light box, sealed 25-card magazine</sub> | |
+| <img src="docs/docs/readme/v1-concept.png" width="260"><br>**v1 · Concept**<br><sub>Fully disposable strap with a layered stack: UV window, diffusion cap, PTFE membrane, stain-length strip</sub> | <img src="docs/docs/readme/v2-first-cad.png" width="260"><br>**v2 · First CAD**<br><sub>Flat band and a clip-in pod with strip stack, colour scale, markers and expiry patch</sub> | <img src="docs/docs/readme/v3-v4-cradle-lid.png" width="260"><br>**v3–v4 · Reusable band**<br><sub>Buckle strap and cradle with a lid; disposable pod with peel foil and tamper tab</sub> |
+| <img src="docs/docs/readme/v5-pod-shutter.png" width="260"><br>**v5 · Flush shutter pod**<br><sub>Sliding hole-shutter, filter dots in the reference cell, FKM straps with breakaway link</sub> | <img src="docs/docs/readme/v6-card-exploded.png" width="260"><br>**v6 · Sensor card layers**<br><sub>Roll-made one-time card (₹4–12); heat dot replaces the dye-wick</sub> | <img src="docs/docs/readme/v6-card-in-frame.png" width="260"><br>**v6 · Card in reusable frame**<br><sub>A new card pushes the old one out; shutter and markers stay on the frame</sub> |
+| <img src="docs/docs/readme/v6-band-worn.png" width="260"><br>**v6 · Worn band**<br><sub>Same reusable band and cradle as v5, with a new exit slot</sub> | <img src="docs/docs/readme/v6-dock.png" width="260"><br>**v6 · Motorised dock**<br><sub>Stepper pusher, foil peeler, Pi Zero 2 W camera light box, sealed 25-card magazine</sub> | |
 
 Each step removed a real weakness: a thrown-away band (v1), no shift on/off control (v2), a lid that could snag on machinery (v3–v4), and an expensive 11-part moulded pod (v5).
 
